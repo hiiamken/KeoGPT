@@ -1,5 +1,4 @@
 // utils/discord.js
-
 const {
   ChannelType,
   PermissionsBitField,
@@ -32,13 +31,13 @@ function createResponseStyleButtons() {
 
 function hasBotPermissions(channel, permissions) {
   if (!channel || !channel.guild) {
-    // Thêm kiểm tra này
     return false;
   }
   const botMember = channel.guild.members.me;
   if (!botMember) return false;
   return channel.permissionsFor(botMember).has(permissions);
 }
+
 async function sendErrorMessage(message, content, ephemeral = false) {
   const replyOptions = {
     content,
@@ -68,6 +67,7 @@ async function safeDeleteMessage(message) {
     console.warn(`Failed to delete message: ${error.message}`);
   }
 }
+
 async function safeRenameThread(thread, newName) {
   try {
     await thread.setName(newName);
@@ -82,8 +82,9 @@ async function safeRenameThread(thread, newName) {
 function createMockSlashInteraction(
   commandName,
   options = {},
-  userId = "123",
-  channelId = config.allowedChannelId
+  userId = "1234567890",
+  channelId = config.allowedChannelId,
+  guildId = "test-guild-id"
 ) {
   return {
     isChatInputCommand: () => true,
@@ -92,9 +93,21 @@ function createMockSlashInteraction(
       getString: (name) => options[name] || null,
       getAttachment: (name) => options[name] || null,
       getBoolean: (name) => options[name] || null,
+      getUser: (name) => {
+        if (name === "target" && options.subcommand === "user") {
+          return { id: options.target };
+        }
+        return null;
+      },
+      getSubcommand: () => options.subcommand || null,
     },
-    user: { id: userId },
+    user: {
+      id: userId,
+      username: `User${userId}`,
+      displayAvatarURL: () => "https://example.com/default-avatar.png",
+    },
     channelId,
+    guild: { id: guildId },
     channel: {
       type: "GUILD_TEXT",
       id: channelId,
@@ -130,6 +143,13 @@ function createMockSlashInteraction(
         };
       },
     },
+    client: {
+      user: {
+        id: "some_bot_id",
+        username: "KeoGPT",
+        avatarURL: () => "https://example.com/bot_avatar.png",
+      },
+    },
     deferReply: (opts) => Promise.resolve(),
     followUp: (content) => Promise.resolve({ content }),
     reply: (options) => {
@@ -140,9 +160,10 @@ function createMockSlashInteraction(
             on: (event, callback) => {
               if (event === "collect") {
                 callback({
-                  customId: "simple",
+                  customId: "confirm",
                   user: { id: userId },
                   deferUpdate: () => Promise.resolve(),
+                  update: (options) => Promise.resolve(),
                 });
               } else if (event === "end") {
                 callback([]);
@@ -162,29 +183,38 @@ function createMockSlashInteraction(
 
 function createMockPrefixMessage(
   content,
-  authorId = "456",
+  authorId = "4567890123",
   channelId = config.allowedChannelId,
   attachments = []
 ) {
-  const attachmentsCollection = new Map();
+  const mockAttachments = attachments.map((attachment) => ({
+    name: attachment.name,
+    url: attachment.url,
+    contentType: attachment.contentType,
+  }));
 
-  for (let i = 0; i < attachments.length; i++) {
-    attachmentsCollection.set(String(i), attachments[i]);
-  }
   return {
     content,
-    author: { id: authorId },
+    author: {
+      id: authorId,
+      username: `User${authorId}`,
+      displayAvatarURL: () => "https://example.com/default-avatar.png",
+    },
     channelId,
     attachments: {
-      size: attachmentsCollection.size,
-      first: () =>
-        attachmentsCollection.size > 0
-          ? attachmentsCollection.values().next().value
-          : null,
-      entries: () => attachmentsCollection.entries(),
+      size: mockAttachments.length,
+      map: () => mockAttachments,
+      first: () => (mockAttachments.length > 0 ? mockAttachments[0] : null),
     },
+    reply: (msg) => Promise.resolve({ content: msg }),
+    react: (emoji) => Promise.resolve(),
+    guild: {
+      id: "test-guild-id",
+    },
+    isChatInputCommand: () => false,
     channel: {
       type: "GUILD_TEXT",
+      id: channelId,
       sendTyping: () => Promise.resolve(),
       send: (content) => Promise.resolve({ content }),
       threads: {
@@ -192,10 +222,10 @@ function createMockPrefixMessage(
           Promise.resolve({
             id: "thread123",
             send: (msg) => Promise.resolve({ content: msg }),
-            setName: () => Promise.resolve(),
+            setName: (name) => Promise.resolve(),
           }),
       },
-      isThread: () => false,
+      isThread: () => true,
       ownerId: "someOwnerId",
       parentId: config.allowedChannelId,
       guild: {
@@ -217,32 +247,15 @@ function createMockPrefixMessage(
         };
       },
     },
-    reply: (options) => {
-      return Promise.resolve({
-        content: typeof options === "string" ? options : options.content,
-        createMessageComponentCollector: () => {
-          return {
-            on: (event, callback) => {
-              if (event === "collect") {
-                callback({
-                  customId: "simple",
-                  user: { id: authorId },
-                  deferUpdate: () => Promise.resolve(),
-                });
-              } else if (event === "end") {
-                callback([]);
-              }
-            },
-          };
-        },
-        edit: (options) => {
-          return Promise.resolve({ content: options.content });
-        },
-      });
+    client: {
+      user: {
+        id: "some_bot_id",
+        username: "KeoGPT",
+        avatarURL: () => "https://example.com/bot_avatar.png",
+      },
     },
   };
 }
-
 function createCodeEmbed(code, language = "python", title = "Code") {
   const embed = new EmbedBuilder()
     .setColor("#0099ff")

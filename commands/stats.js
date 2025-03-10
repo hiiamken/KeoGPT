@@ -1,12 +1,15 @@
 // commands/stats.js
-const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
 const db = require("../utils/database");
+const { EmbedBuilder, SlashCommandBuilder } = require("discord.js");
 const config = require("../config");
 
-async function handleStatsCommand(interaction) {
+async function handleStatsCommand(interaction, isSlash = true) {
   try {
-    const userId = interaction.user.id;
-    const username = interaction.user.username;
+    const userId = interaction.user?.id || interaction.author?.id;
+    const username =
+      interaction.user?.username ||
+      interaction.author?.username ||
+      "Unknown User";
 
     const [userRows] = await db.pool.execute(
       "SELECT * FROM users WHERE userId = ?",
@@ -44,7 +47,7 @@ async function handleStatsCommand(interaction) {
             JOIN threads t ON u.userId = t.userId
             WHERE t.createdAt >= ?
             GROUP BY u.userId
-            ORDER BY monthly_points DESC
+            ORDER BY u.total_points DESC
         `,
       [startOfMonth]
     );
@@ -58,33 +61,39 @@ async function handleStatsCommand(interaction) {
       }
     }
 
-    const monthYear = `${now.getMonth() + 1}/${now.getFullYear()}`;
-
     const embed = new EmbedBuilder()
       .setColor("#CF86CA")
       .setTitle(`Thống kê của ${username}`)
-      .setThumbnail(interaction.user.displayAvatarURL())
+      .setThumbnail(
+        interaction.user?.displayAvatarURL() ||
+          interaction.author?.displayAvatarURL()
+      )
       .addFields(
         {
           name: "📊 Tổng quan",
           value: `**Số thread đã tạo:** ${userData.total_threads}\n**Tổng điểm:** ${userData.total_points}`,
         },
         {
-          name: `⭐ Tháng ${monthYear}`,
+          name: "⭐ Tháng này",
           value: `**Điểm:** ${monthlyPoints}\n**Thứ hạng:** ${rank}`,
         }
       )
-      .setTimestamp();
+      .setTimestamp()
+      .addFields({
+        name: "Hướng dẫn",
+        value: "Xem cách tính điểm bằng lệnh `/gpthelp`",
+      });
 
-    await interaction.followUp({ embeds: [embed], ephemeral: true });
+    return { embeds: [embed], ephemeral: !isSlash };
   } catch (error) {
     console.error("Error in stats command:", error);
-    await interaction.followUp({
+    return {
       content: "Có lỗi xảy ra khi lấy thông tin thống kê.",
       ephemeral: true,
-    });
+    };
   }
 }
+
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("stats")
@@ -92,8 +101,12 @@ module.exports = {
     .setDMPermission(false),
 
   async execute(interaction) {
-    await interaction.deferReply({ ephemeral: true });
-    await handleStatsCommand(interaction);
+    const embed = await handleStatsCommand(interaction);
+    if (interaction.deferred || interaction.replied) {
+      await interaction.followUp(embed);
+    } else {
+      await interaction.reply(embed);
+    }
   },
   handleStatsCommand,
 };

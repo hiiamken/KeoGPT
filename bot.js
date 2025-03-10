@@ -8,7 +8,7 @@ const {
   Partials,
   ChannelType,
   ActivityType,
-} = require("discord.js"); // Thêm ActivityType
+} = require("discord.js");
 const fs = require("node:fs");
 const path = require("node:path");
 const config = require("./config");
@@ -91,6 +91,7 @@ client.on("ready", async () => {
   cron.schedule("0 3 * * *", async () => {
     await deleteExpiredThreads();
   });
+
   cron.schedule("0 0 1 * *", async () => {
     await resetPoints();
   });

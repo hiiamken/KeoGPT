@@ -19,7 +19,8 @@ module.exports = {
       followUp: async (options) => {
         return await message.channel.send(options);
       },
+      client: message.client,
     };
-    await handleStatsCommand(mockInteraction);
+    await handleStatsCommand(mockInteraction, false);
   },
 };
