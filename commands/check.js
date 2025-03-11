@@ -1,10 +1,10 @@
 // commands/check.js
-const { SlashCommandBuilder } = require("discord.js");
+const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
 const db = require("../utils/database");
 const config = require("../config");
 const discordUtils = require("../utils/discord");
 
-async function handleCheckCommand(message) {
+async function handleCheckCommand(interaction, isSlash = true) {
   try {
     const [threadCountRows] = await db.pool.execute(
       "SELECT COUNT(*) as count FROM threads"
@@ -19,7 +19,7 @@ async function handleCheckCommand(message) {
     const [sizeRows] = await db.pool.execute(
       `
             SELECT table_schema "database",
-                   ROUND(SUM(data_length + index_length) / 1024 / 1024, 2) AS "size_mb"
+                ROUND(SUM(data_length + index_length) / 1024 / 1024, 2) AS "size_mb"
             FROM information_schema.TABLES
             WHERE table_schema = ?
             GROUP BY table_schema;
@@ -36,27 +36,42 @@ async function handleCheckCommand(message) {
     const emptyLength = progressBarLength - filledLength;
     const progressBar = "█".repeat(filledLength) + "░".repeat(emptyLength);
 
-    let replyContent = `**Trạng thái Cơ sở Dữ liệu:**\n\n`;
-    replyContent += `*   **Số threads:** ${threadCount}\n`;
-    replyContent += `*   **Số tin nhắn:** ${messageCount}\n`;
-    replyContent += `*   **Dung lượng:** ${dbSizeMB} MB / ${maxDBSizeMB} MB\n`;
-    replyContent += `*   **Mức sử dụng:** \`${progressBar}\` ${percentage.toFixed(
-      2
-    )}%\n\n`;
+    const embed = new EmbedBuilder()
+      .setColor("#0099ff")
+      .setTitle("Database Status")
+      .addFields(
+        { name: "Threads", value: threadCount.toString(), inline: true },
+        { name: "Messages", value: messageCount.toString(), inline: true },
+        {
+          name: "Size",
+          value: `${dbSizeMB} MB / ${maxDBSizeMB} MB`,
+          inline: true,
+        },
+        { name: "Usage", value: `${progressBar} ${percentage.toFixed(2)}%` }
+      );
 
     if (percentage >= 80) {
-      replyContent +=
-        "**⚠️ Cảnh báo:** Dung lượng cơ sở dữ liệu sắp đầy. Bạn nên xem xét xóa dữ liệu cũ hoặc nâng cấp.\n";
+      embed.addFields({
+        name: "⚠️ Warning",
+        value:
+          "Database usage is nearing capacity. Consider deleting old data or upgrading.",
+      });
     } else if (percentage >= 60) {
-      replyContent +=
-        "**⚠️ Chú ý:** Dung lượng cơ sở dữ liệu đang tăng. Hãy theo dõi.\n";
+      embed.addFields({
+        name: "⚠️ Note",
+        value: "Database usage is increasing. Please monitor.",
+      });
     } else {
-      replyContent += "**Tình trạng:** Cơ sở dữ liệu có vẻ ổn.\n";
+      embed.addFields({
+        name: "Status",
+        value: "Database appears to be in good condition.",
+      });
     }
-    return replyContent;
+
+    return { embeds: [embed], ephemeral: !isSlash };
   } catch (error) {
     console.error("Error in check command:", error);
-    return "Có lỗi khi kiểm tra database.";
+    return { content: "Có lỗi khi kiểm tra database.", ephemeral: true };
   }
 }
 
@@ -74,9 +89,10 @@ module.exports = {
         true
       );
     }
-    await interaction.deferReply({ ephemeral: true });
-    const checkResult = await handleCheckCommand(interaction);
-    await interaction.editReply({ content: checkResult, ephemeral: true });
+
+    await interaction.deferReply({ ephemeral: false });
+    const result = await handleCheckCommand(interaction, true);
+    await interaction.followUp(result);
   },
 
   handleCheckCommand,
