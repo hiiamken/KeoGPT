@@ -2,6 +2,7 @@
 const { handleRankingCommand } = require("../commands/ranking-gpt");
 const { ChannelType } = require("discord.js");
 const config = require("../config");
+
 module.exports = {
   name: "ranking-gpt",
   description: "Xem bảng xếp hạng (prefix).",
@@ -18,12 +19,14 @@ module.exports = {
       followUp: async (options) => {
         return await message.channel.send(options);
       },
-      deferReply: async (option) => {
+      deferReply: async () => {
         return await message.channel.sendTyping();
       },
       client: message.client,
+      author: message.author,
     };
 
-    await handleRankingCommand(mockInteraction);
+    const result = await handleRankingCommand(mockInteraction);
+    await message.channel.send(result);
   },
 };

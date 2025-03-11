@@ -11,14 +11,14 @@ async function handleRankingCommand(interaction) {
 
     const [rows] = await db.pool.execute(
       `
-            SELECT u.username, u.total_points, u.userId
-            FROM users u
-            JOIN threads t ON u.userId = t.userId
-            WHERE t.createdAt >= ?
-            GROUP BY u.userId
-            ORDER BY u.total_points DESC
-            LIMIT 10
-        `,
+                SELECT u.username, u.total_points, u.userId
+                FROM users u
+                JOIN threads t ON u.userId = t.userId
+                WHERE t.createdAt >= ?
+                GROUP BY u.userId
+                ORDER BY u.total_points DESC
+                LIMIT 10
+            `,
       [startOfMonth]
     );
 
@@ -44,13 +44,13 @@ async function handleRankingCommand(interaction) {
     let userRank = "Chưa có hạng";
     const [allRanks] = await db.pool.execute(
       `
-            SELECT u.userId, SUM(t.points) AS total_points
-            FROM users u
-            JOIN threads t ON u.userId = t.userId
-            WHERE t.createdAt >= ?
-            GROUP BY u.userId
-            ORDER BY total_points DESC
-        `,
+                SELECT u.userId, SUM(t.points) AS total_points
+                FROM users u
+                JOIN threads t ON u.userId = t.userId
+                WHERE t.createdAt >= ?
+                GROUP BY u.userId
+                ORDER BY total_points DESC
+            `,
       [startOfMonth]
     );
 
@@ -106,13 +106,10 @@ async function handleRankingCommand(interaction) {
       value: "Xem cách tính điểm bằng lệnh `/gpthelp`",
     });
 
-    await interaction.reply({ embeds: [embed], ephemeral: false });
+    return { embeds: [embed], ephemeral: false };
   } catch (error) {
     console.error("Error in ranking-gpt command:", error);
-    await interaction.followUp({
-      content: "Có lỗi xảy ra khi lấy bảng xếp hạng.",
-      ephemeral: true,
-    });
+    return { content: "Có lỗi xảy ra khi lấy bảng xếp hạng.", ephemeral: true };
   }
 }
 
@@ -124,7 +121,16 @@ module.exports = {
 
   async execute(interaction) {
     await interaction.deferReply({ ephemeral: false });
-    await handleRankingCommand(interaction);
+    try {
+      const result = await handleRankingCommand(interaction);
+      await interaction.followUp(result);
+    } catch (error) {
+      console.error("Error in ranking-gpt slash command execution:", error);
+      await interaction.followUp({
+        content: "Đã xảy ra lỗi khi xử lí lệnh.",
+        ephemeral: true,
+      });
+    }
   },
   handleRankingCommand,
 };

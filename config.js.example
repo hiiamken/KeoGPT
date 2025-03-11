@@ -1,15 +1,18 @@
 // config.js.example
 
+// Copy this file to config.js and fill in your actual values.
+
 module.exports = {
-    allowedChannelId: 'YOUR_ALLOWED_CHANNEL_ID', // Thay bằng ID kênh Discord
-    adminUserId: 'YOUR_ADMIN_USER_ID',          // Thay bằng ID Discord của bạn
-    defaultLanguage: 'vi',                    // Ngôn ngữ mặc định
-    maxHistoryLength: 10,                     // Số lượng tin nhắn tối đa trong lịch sử
-    loadingEmoji: '<a:PinkLoading:1346672442751582349>',  // Thay bằng emoji của bạn, hoặc xóa nếu không dùng
-    geminiModel: 'models/gemini-2.0-flash',     // Model Gemini (có thể thay đổi)
-    threadLifetimeDays: 2,                    // Thời gian sống của thread (ngày)
-    prefix: '!',                             // Prefix cho các lệnh prefix
-    supportedLanguages: {                    // Danh sách ngôn ngữ và tên hiển thị
+    allowedChannelId: 'YOUR_ALLOWED_CHANNEL_ID',  // Replace with your Discord channel ID
+    adminUserId: 'YOUR_ADMIN_USER_ID',           // Replace with your Discord user ID
+    defaultLanguage: 'vi',                     // Default language (Vietnamese)
+    maxHistoryLength: 10,                      // Maximum number of messages to keep in history
+    loadingEmoji: '<a:PinkLoading:YOUR_LOADING_EMOJI_ID>', // Optional: Replace with your loading emoji ID (or remove)
+    successEmoji: '<:PinkCheck:YOUR_SUCCESS_EMOJI_ID>', // Optional: Custom emoji for success messages
+    geminiModel: 'models/gemini-2.0-flash',     // Gemini model to use
+    threadLifetimeDays: 2,                     // Number of days before inactive threads expire
+    prefix: '!',                             // Prefix for prefix commands
+    supportedLanguages: {                    // List of supported languages and their display names
         'vi': 'Tiếng Việt',
         'en': 'English',
         'ja': '日本語 (Japanese)',
@@ -26,5 +29,6 @@ module.exports = {
         'hi': 'हिन्दी (Hindi)',
         'bn': 'বাংলা (Bengali)'
     },
-      languageInstruction: "Hãy trả lời bằng tiếng Việt. Trình bày lời giải chi tiết, rõ ràng, từng bước. Sử dụng Markdown để định dạng (in đậm, gạch đầu dòng, v.v.). Viết các công thức toán học một cách dễ đọc (ví dụ: f'(x), e^x, x > 0, (0, +∞)).",
+    languageInstruction: "Hãy trả lời bằng tiếng Việt...", // Default language instruction
+    pointsPerInteraction: 2,                  // Points awarded per interaction
 };
