@@ -1,5 +1,5 @@
 // prefixcommands/ask.js
-const { handleAskCommand } = require('../commands/ask');
+const { handleAskCommand, processImageAttachment, sendMessageAndSave } = require('../commands/ask');
 const config = require('../config');
 const { ChannelType, PermissionsBitField } = require('discord.js');
 const discordUtils = require('../utils/discord');
@@ -27,6 +27,6 @@ module.exports = {
             return await discordUtils.sendErrorMessage(message, 'Bot không có đủ quyền để thực hiện lệnh này (gửi tin nhắn, tạo thread, nhúng link, đọc lịch sử tin nhắn, đính kèm file)!');
         }
         await message.channel.sendTyping();
-        await handleAskCommand(message, prompt, config.defaultLanguage);
+        await handleAskCommand.call({ processImageAttachment, sendMessageAndSave }, message, prompt, config.defaultLanguage);
     },
 };
