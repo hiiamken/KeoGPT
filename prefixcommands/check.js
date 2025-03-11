@@ -1,7 +1,8 @@
 // prefixcommands/check.js
 const { handleCheckCommand } = require("../commands/check");
 const config = require("../config");
-const { ChannelType } = require("discord.js");
+const { ChannelType } = require("discord.js"); // Not strictly necessary here, but good for consistency
+// const discordUtils = require('../utils/discord'); // No longer needed
 
 module.exports = {
   name: "check",
@@ -16,22 +17,17 @@ module.exports = {
       guild: message.guild,
       channel: message.channel,
 
+      reply: async (options) => {
+        return await message.channel.send(options);
+      },
+      followUp: async (options) => {
+        return await message.channel.send(options);
+      },
       client: message.client,
       author: message.author,
     };
 
-    const result = await handleCheckCommand(mockInteraction, false);
-
-    try {
-      await message.channel.send(result);
-    } catch (error) {
-      console.error("Error sending check result:", error);
-
-      await message.reply({
-        content:
-          "Không thể gửi tin nhắn riêng cho bạn. Hãy đảm bảo bạn đã cho phép bot gửi DM và không chặn bot.",
-        allowedMentions: { repliedUser: false },
-      });
-    }
+    const checkResult = await handleCheckCommand(mockInteraction, false);
+    await message.channel.send(checkResult);
   },
 };

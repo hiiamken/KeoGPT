@@ -18,8 +18,8 @@ async function handleCheckCommand(interaction, isSlash = true) {
 
     const [sizeRows] = await db.pool.execute(
       `
-            SELECT table_schema "database",
-                ROUND(SUM(data_length + index_length) / 1024 / 1024, 2) AS "size_mb"
+            SELECT table_schema AS database,
+                   ROUND(SUM(data_length + index_length) / 1024 / 1024, 2) AS size_mb
             FROM information_schema.TABLES
             WHERE table_schema = ?
             GROUP BY table_schema;
@@ -35,36 +35,39 @@ async function handleCheckCommand(interaction, isSlash = true) {
     const filledLength = Math.round((percentage / 100) * progressBarLength);
     const emptyLength = progressBarLength - filledLength;
     const progressBar = "█".repeat(filledLength) + "░".repeat(emptyLength);
-
     const embed = new EmbedBuilder()
-      .setColor("#0099ff")
-      .setTitle("Database Status")
+      .setColor("#CF86CA")
+      .setTitle("📊 Trạng thái Cơ sở Dữ liệu")
       .addFields(
         { name: "Threads", value: threadCount.toString(), inline: true },
-        { name: "Messages", value: messageCount.toString(), inline: true },
+        { name: "Tin nhắn", value: messageCount.toString(), inline: true },
         {
-          name: "Size",
+          name: "Dung lượng",
           value: `${dbSizeMB} MB / ${maxDBSizeMB} MB`,
           inline: true,
         },
-        { name: "Usage", value: `${progressBar} ${percentage.toFixed(2)}%` }
-      );
+        {
+          name: "Mức sử dụng",
+          value: `${progressBar} ${percentage.toFixed(2)}%`,
+        }
+      )
+      .setTimestamp();
 
     if (percentage >= 80) {
       embed.addFields({
-        name: "⚠️ Warning",
+        name: "⚠️ Cảnh báo",
         value:
-          "Database usage is nearing capacity. Consider deleting old data or upgrading.",
+          "Dung lượng cơ sở dữ liệu sắp đầy. Bạn nên xem xét xóa dữ liệu cũ hoặc nâng cấp.",
       });
     } else if (percentage >= 60) {
       embed.addFields({
-        name: "⚠️ Note",
-        value: "Database usage is increasing. Please monitor.",
+        name: "⚠️ Chú ý:",
+        value: "Dung lượng cơ sở dữ liệu đang tăng. Hãy theo dõi.",
       });
     } else {
       embed.addFields({
-        name: "Status",
-        value: "Database appears to be in good condition.",
+        name: "✅ Tình trạng",
+        value: "Cơ sở dữ liệu có vẻ ổn.",
       });
     }
 
@@ -83,16 +86,13 @@ module.exports = {
 
   async execute(interaction) {
     if (interaction.user.id !== config.adminUserId) {
-      return await discordUtils.sendErrorMessage(
-        interaction,
-        "Bạn không có quyền sử dụng lệnh này.",
-        true
-      );
+      return await interaction.followUp({
+        content: "Bạn không có quyền sử dụng lệnh này.",
+        ephemeral: true,
+      });
     }
-
-    await interaction.deferReply({ ephemeral: false });
-    const result = await handleCheckCommand(interaction, true);
-    await interaction.followUp(result);
+    const checkResult = await handleCheckCommand(interaction);
+    await interaction.followUp(checkResult);
   },
 
   handleCheckCommand,
