@@ -16,6 +16,9 @@ const fs = require("fs");
 const TEST_DB_FILE = "test_database.sqlite";
 const MAIN_DB_FILE = "database.sqlite";
 
+const SHOULD_DELETE_THREADS = false; // Đặt true nếu muốn xóa thread hết hạn
+const SHOULD_RESET_POINTS = false; // Đặt true nếu muốn reset điểm
+
 const COLORS = {
   reset: "\x1b[0m",
   green: "\x1b[32m",
@@ -67,9 +70,13 @@ async function runTests() {
         func: () => insertOrUpdateUser(testUserId, testUserName),
         name: "insertOrUpdateUser",
       },
-      { func: deleteExpiredThreads, name: "deleteExpiredThreads" },
-      { func: () => resetAllPoints(true), name: "resetAllPoints" },
-    ];
+      SHOULD_DELETE_THREADS
+        ? { func: deleteExpiredThreads, name: "deleteExpiredThreads" }
+        : null,
+      SHOULD_RESET_POINTS
+        ? { func: () => resetAllPoints(true), name: "resetAllPoints" }
+        : null,
+    ].filter(Boolean);
 
     for (const test of dbTests) {
       try {
