@@ -1,6 +1,5 @@
 const config = require("../config");
 
-// Hàm lấy phần tử ngẫu nhiên từ mảng
 function getRandomElement(array) {
   return array[Math.floor(Math.random() * array.length)];
 }
@@ -24,17 +23,17 @@ function getRandomLoadingMessage() {
 
 const helpSuggestions = Object.freeze([
   "Có vẻ bạn đang bối rối. 🤔  Hãy thử `!gpthelp` xem sao!",
-  "Bạn cần giúp đỡ?   `!gpthelp` là bạn của bạn!",
-  "Lạc lối rồi hả?   Để tôi chỉ đường cho, gõ `!gpthelp` nhé!",
-  "Ê! Hình như có lệnh `!gpthelp` thần thánh lắm đó.  Thử xem!",
+  "Bạn cần giúp đỡ? `!gpthelp` là bạn của bạn!",
+  "Lạc lối rồi hả? Để tôi chỉ đường cho, gõ `!gpthelp` nhé!",
+  "Ê! Hình như có lệnh `!gpthelp` thần thánh lắm đó. Thử xem!",
   "Đừng lo, `!gpthelp` sẽ giải cứu bạn khỏi mớ bòng bong này!",
   "`!gpthelp` đi, ngại gì! 😉",
   "Hỡi người dùng lạc lối, `!gpthelp` sẽ dẫn lối cho bạn! ✨",
   "Bot xịn không tự nhiên sinh ra, `!gpthelp` nha bạn ơi!",
-  "Đang vò đầu bứt tai hả?   `!gpthelp` có bí kíp đó!",
-  "Muốn trở thành cao thủ Discord?   `!gpthelp` là bước đầu tiên!",
+  "Đang vò đầu bứt tai hả? `!gpthelp` có bí kíp đó!",
+  "Muốn trở thành cao thủ Discord? `!gpthelp` là bước đầu tiên!",
   "Alo alo, `!gpthelp` nghe rõ trả lời!",
-  "Nghe đồn `!gpthelp` có thể giải quyết mọi vấn đề.  Thử xem sao!",
+  "Nghe đồn `!gpthelp` có thể giải quyết mọi vấn đề. Thử xem sao!",
   "Đừng ngại, cứ `!gpthelp` mà gõ, có gì khó để bot lo!",
 ]);
 
@@ -58,7 +57,10 @@ const afterReplySuggestions = Object.freeze([
 ]);
 
 function getRandomReplySuggestion(threadName) {
-  return getRandomElement(afterReplySuggestions).replace("THREADNAME", threadName);
+  return getRandomElement(afterReplySuggestions).replace(
+    "**THREADNAME**",
+    threadName
+  );
 }
 
 module.exports = {

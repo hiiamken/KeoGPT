@@ -1,34 +1,74 @@
-// config.js.example
-
-// Copy this file to config.js and fill in your actual values.
-
 module.exports = {
-    allowedChannelId: 'YOUR_ALLOWED_CHANNEL_ID',  // Replace with your Discord channel ID
-    adminUserId: 'YOUR_ADMIN_USER_ID',           // Replace with your Discord user ID
-    defaultLanguage: 'vi',                     // Default language (Vietnamese)
-    maxHistoryLength: 10,                      // Maximum number of messages to keep in history
-    loadingEmoji: '<a:PinkLoading:YOUR_LOADING_EMOJI_ID>', // Optional: Replace with your loading emoji ID (or remove)
-    successEmoji: '<:PinkCheck:YOUR_SUCCESS_EMOJI_ID>', // Optional: Custom emoji for success messages
-    geminiModel: 'models/gemini-2.0-flash',     // Gemini model to use
-    threadLifetimeDays: 2,                     // Number of days before inactive threads expire
-    prefix: '!',                             // Prefix for prefix commands
-    supportedLanguages: {                    // List of supported languages and their display names
-        'vi': 'Tiếng Việt',
-        'en': 'English',
-        'ja': '日本語 (Japanese)',
-        'ko': '한국어 (Korean)',
-        'fr': 'Français (French)',
-        'es': 'Español (Spanish)',
-        'de': 'Deutsch (German)',
-        'ru': 'Русский (Russian)',
-        'zh': '中文 (Chinese - Simplified)',
-        'zh-TW': '繁體中文 (Chinese - Traditional)',
-        'ar': 'العربية (Arabic)',
-        'pt': 'Português (Portuguese)',
-        'it': 'Italiano (Italian)',
-        'hi': 'हिन्दी (Hindi)',
-        'bn': 'বাংলা (Bengali)'
+    // The Discord channel where the bot is allowed to operate
+    allowedChannelId: "YOUR_CHANNEL_ID_HERE", // Replace with your channel ID
+
+    // Admin user ID (has full control over admin commands)
+    adminUserId: "YOUR_ADMIN_USER_ID_HERE", // Replace with your Discord user ID
+
+    // Default language for the bot
+    defaultLanguage: "vi",
+
+    // Number of past messages stored for conversation history
+    maxHistoryLength: 10,
+
+    // Emoji displayed when the bot is processing a request
+    loadingEmoji: "<YOUR_EMOJI_ID_HERE>", // Replace with your loading emoji
+
+    // Emoji displayed when a command executes successfully
+    successEmoji: "<YOUR_EMOJI_ID_HERE>", // Replace with your success emoji
+
+    // AI model to be used
+    geminiModel: "models/xxx",
+
+    // Lifetime of a thread (in days)
+    threadLifetimeDays: 2,
+
+    // Prefix for bot commands (for text-based commands)
+    prefix: "!",
+
+    // Supported languages
+    supportedLanguages: {
+        vi: "Tiếng Việt",
+        en: "English",
+        ja: "日本語 (Japanese)",
+        ko: "한국어 (Korean)",
+        fr: "Français (French)",
+        es: "Español (Spanish)",
+        de: "Deutsch (German)",
+        ru: "Русский (Russian)",
+        zh: "中文 (Chinese - Simplified)",
+        "zh-TW": "繁體中文 (Chinese - Traditional)",
+        ar: "العربية (Arabic)",
+        pt: "Português (Portuguese)",
+        it: "Italiano (Italian)",
+        hi: "हिन्दी (Hindi)",
+        bn: "বাংলা (Bengali)"
     },
-    languageInstruction: "Hãy trả lời bằng tiếng Việt...", // Default language instruction
-    pointsPerInteraction: 2,                  // Points awarded per interaction
+
+    // Instruction to make the AI respond in a specific language
+    languageInstruction:
+        "Please respond in Vietnamese. Provide detailed, clear, and step-by-step explanations. Use Markdown formatting (bold, bullet points, etc.). Format mathematical expressions clearly (e.g., f'(x), e^x, x > 0, (0, +∞)).",
+
+    // Points awarded per interaction with the bot
+    pointsPerInteraction: 2,
+
+    // Database type ('sqlite' or 'mysql')
+    databaseType: "sqlite", // Use 'mysql' if using a MySQL database
+
+    // SQLite database file path
+    sqlitePath: "./database.sqlite", // Absolute or relative path
+
+    // 🛠 **MySQL Configuration (only if databaseType is set to 'mysql')**
+    mysqlConfig: {
+        host: process.env.DB_HOST || "localhost",
+        user: process.env.DB_USER || "your_mysql_user",
+        password: process.env.DB_PASSWORD || "your_mysql_password",
+        database: process.env.DB_NAME || "keogpt",
+        port: process.env.DB_PORT || 3306,
+        charset: "utf8mb4", // Supports Unicode & emoji
+        connectionLimit: 50,
+    },
+
+    // ⏳ **Timeout for Gemini API requests**
+    geminiTimeout: 15000, // Maximum wait time for API response (ms)
 };

@@ -2,7 +2,8 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 const config = require("../config");
 const fs = require("node:fs");
 const path = require("node:path");
-const fetch = (...args) => import("node-fetch").then(({ default: fetch }) => fetch(...args));
+const fetch = (...args) =>
+  import("node-fetch").then(({ default: fetch }) => fetch(...args));
 
 const GEMINI_TIMEOUT = 15000;
 
@@ -14,12 +15,17 @@ async function generateContent(prompt) {
     const result = await Promise.race([
       geminiModel.generateContent(prompt),
       new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("Gemini API timeout")), GEMINI_TIMEOUT)
+        setTimeout(
+          () => reject(new Error("Gemini API timeout")),
+          GEMINI_TIMEOUT
+        )
       ),
     ]);
-    return result?.response?.text() || "⚠️ Lỗi: Không nhận được phản hồi từ Gemini.";
+    return (
+      result?.response?.text() || "⚠️ Lỗi: Không nhận được phản hồi từ Gemini."
+    );
   } catch (error) {
-    console.error("Gemini API error (generateContent):", error);
+    console.error("❌ Gemini API error (generateContent):", error);
     return error.message === "Gemini API timeout"
       ? "⚠️ Xin lỗi, API Gemini mất quá nhiều thời gian để phản hồi. Vui lòng thử lại sau."
       : "⚠️ Đã xảy ra lỗi khi kết nối với API Gemini.";
@@ -33,21 +39,27 @@ async function generateTitle(prompt) {
 
 async function generateContentWithHistory(messages) {
   try {
-    if (!messages || messages.length === 0 || !messages[messages.length - 1]?.parts?.[0]?.text) {
+    if (
+      !messages ||
+      messages.length === 0 ||
+      !messages[messages.length - 1]?.parts?.[0]?.text
+    ) {
       throw new Error("⚠️ Lỗi: Dữ liệu lịch sử không hợp lệ.");
     }
 
     const chat = await geminiModel.startChat({
       history: messages,
-      generationConfig: {
-        maxOutputTokens: 4096,
-      },
+      generationConfig: { maxOutputTokens: 4096 },
     });
 
-    const result = await chat.sendMessage(messages[messages.length - 1].parts[0].text);
-    return result?.response?.text() || "⚠️ Lỗi: Không nhận được phản hồi từ Gemini.";
+    const result = await chat.sendMessage(
+      messages[messages.length - 1].parts[0].text
+    );
+    return (
+      result?.response?.text() || "⚠️ Lỗi: Không nhận được phản hồi từ Gemini."
+    );
   } catch (error) {
-    console.error("Gemini API error (generateContentWithHistory):", error);
+    console.error("❌ Gemini API error (generateContentWithHistory):", error);
     return "⚠️ Đã xảy ra lỗi khi xử lý dữ liệu.";
   }
 }
@@ -67,7 +79,10 @@ const languageInstructions = Object.freeze({
 });
 
 function getLanguageInstruction(language) {
-  return languageInstructions[language] || `Please respond in ${language}. Format the response using Markdown.`;
+  return (
+    languageInstructions[language] ||
+    `Please respond in ${language}. Format the response using Markdown.`
+  );
 }
 
 function fileToGenerativePart(filePath, mimeType) {
@@ -79,7 +94,7 @@ function fileToGenerativePart(filePath, mimeType) {
       },
     };
   } catch (error) {
-    console.error("Error reading file for Gemini API:", error);
+    console.error("❌ Error reading file for Gemini API:", error);
     return null;
   }
 }
@@ -88,18 +103,22 @@ async function downloadImage(url, filename) {
   try {
     const response = await fetch(url);
     if (!response.ok) {
-      throw new Error(`⚠️ Failed to download image: ${response.status} ${response.statusText}`);
+      throw new Error(
+        `⚠️ Failed to download image: ${response.status} ${response.statusText}`
+      );
     }
 
     const buffer = await response.arrayBuffer();
     fs.writeFileSync(filename, Buffer.from(buffer));
+    console.log(`✅ Image downloaded successfully: ${filename}`);
   } catch (error) {
-    console.error("Error downloading image:", error);
+    console.error("❌ Error downloading image:", error);
     throw error;
   }
 }
 
 module.exports = {
+  generateContent,
   generateTitle,
   generateContentWithHistory,
   getLanguageInstruction,

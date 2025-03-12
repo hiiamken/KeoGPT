@@ -1,35 +1,80 @@
-require('dotenv').config(); // Load .env if you haven't already
-const path = require('path');
+require("dotenv").config();
+const path = require("path");
 
 module.exports = {
-  development: { // Cấu hình cho development (mặc định)
-    client: 'better-sqlite3', // Hoặc 'mysql', tùy bạn chọn môi trường mặc định
+  development: {
+    client: "better-sqlite3",
     connection: {
-      filename: path.join(__dirname, './database.sqlite') // Đường dẫn đến file SQLite
+      filename: path.join(__dirname, "./database.sqlite"),
     },
     migrations: {
-      directory: path.join(__dirname, './migrations') // Thư mục chứa migrations
+      directory: path.join(__dirname, "./migrations"),
     },
-    useNullAsDefault: true, // Bắt buộc với SQLite
-    pool: { // Thêm cấu hình pool
+    seeds: {
+      directory: path.join(__dirname, "./seeds"),
+    },
+    useNullAsDefault: true,
+    pool: {
       min: 2,
-      max: 50 // Tăng giá trị max để cho phép nhiều kết nối hơn
-    }
+      max: 50,
+    },
   },
 
-  // Cấu hình cho MySQL (nếu bạn muốn)
-  mysql: {
-    client: 'mysql2',
+  production: {
+    client: "mysql2",
     connection: {
-      host: process.env.DB_HOST,
-      user: process.env.DB_USER,
-      password: process.env.DB_PASSWORD,
-      database: process.env.DB_NAME,
+      host: process.env.DB_HOST || "localhost",
+      user: process.env.DB_USER || "root",
+      password: process.env.DB_PASSWORD || "",
+      database: process.env.DB_NAME || "keogpt",
+      charset: "utf8mb4",
+      port: process.env.DB_PORT || 3306,
     },
     migrations: {
-      directory: path.join(__dirname, './migrations') // Cùng thư mục với SQLite
-    }
+      directory: path.join(__dirname, "./migrations"),
+    },
+    seeds: {
+      directory: path.join(__dirname, "./seeds"),
+    },
+    pool: {
+      min: 2,
+      max: 100,
+    },
   },
 
-  // Bạn có thể thêm các môi trường khác (production, staging,...)
+  staging: {
+    client: "mysql2",
+    connection: {
+      host: process.env.STAGING_DB_HOST || "localhost",
+      user: process.env.STAGING_DB_USER || "root",
+      password: process.env.STAGING_DB_PASSWORD || "",
+      database: process.env.STAGING_DB_NAME || "keogpt_staging",
+      charset: "utf8mb4",
+      port: process.env.STAGING_DB_PORT || 3306,
+    },
+    migrations: {
+      directory: path.join(__dirname, "./migrations"),
+    },
+    seeds: {
+      directory: path.join(__dirname, "./seeds"),
+    },
+    pool: {
+      min: 2,
+      max: 50,
+    },
+  },
+
+  test: {
+    client: "better-sqlite3",
+    connection: {
+      filename: path.join(__dirname, "./test.sqlite"),
+    },
+    migrations: {
+      directory: path.join(__dirname, "./migrations"),
+    },
+    seeds: {
+      directory: path.join(__dirname, "./seeds"),
+    },
+    useNullAsDefault: true,
+  },
 };

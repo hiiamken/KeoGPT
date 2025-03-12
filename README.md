@@ -4,7 +4,7 @@
   </a>
 </p>
 
-<h1 align="center">KeoGPT v1.1.0</h1>
+<h1 align="center">KeoGPT v1.2.0</h1>
 
 <p align="center">
   A versatile Discord AI assistant, powered by Google's Gemini.
