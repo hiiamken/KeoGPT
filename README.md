@@ -4,7 +4,7 @@
   </a>
 </p>
 
-<h1 align="center">KeoGPT v1.0.3</h1>
+<h1 align="center">KeoGPT v1.1.0</h1>
 
 <p align="center">
   A versatile Discord AI assistant, powered by Google's Gemini.
@@ -120,10 +120,11 @@ Cảm ơn các bạn đã sử dụng KeoGPT! ❤️
 *   ![Discord.js](https://img.shields.io/badge/Discord.js-7289DA?style=for-the-badge&logo=discord&logoColor=white) [Discord.js](https://discord.js.org/#/)
 *   ![Google Cloud](https://img.shields.io/badge/Google_Cloud-4285F4?style=for-the-badge&logo=google-cloud&logoColor=white) [Google Cloud](https://cloud.google.com/)
 *   ![MySQL](https://img.shields.io/badge/MySQL-00000F?style=for-the-badge&logo=mysql&logoColor=white)
+*   ![SQLite](https://www.sqlite.org/)
 
 ## 🤝 Contributing
 
-If you'd like to contribute to the project, please create a new [issue](https://github.com/YOUR_GITHUB_USERNAME/YOUR_REPOSITORY_NAME/issues) or submit a [pull request](https://github.com/YOUR_GITHUB_USERNAME/YOUR_REPOSITORY_NAME/pulls). All contributions are welcome!
+If you'd like to contribute to the project, please create a new [issue](https://github.com/hiiamken/KeoGPT-DiscordBot/issues) or submit a [pull request](https://github.com/hiiamken/KeoGPT-DiscordBot/pulls). All contributions are welcome!
 
 ## 📝 License
 
