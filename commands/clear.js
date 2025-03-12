@@ -1,5 +1,3 @@
-// commands/clear.js
-const db = require("../utils/database");
 const {
   SlashCommandBuilder,
   ChannelType,
@@ -7,6 +5,13 @@ const {
 } = require("discord.js");
 const config = require("../config");
 const discordUtils = require("../utils/discord");
+const {
+    executeQuery,
+    beginTransaction,
+    commitTransaction,
+    rollbackTransaction,
+    releaseConnection,
+} = require("../utils/database");
 
 const clearMessages = [
   `${config.successEmoji} Xong! Coi như chưa có gì xảy ra nhé. 😉`,
@@ -27,8 +32,9 @@ function getRandomClearMessage() {
   return clearMessages[Math.floor(Math.random() * clearMessages.length)];
 }
 
-async function handleClearCommand(message, client) {
+async function handleClearCommand(message) {
   const isSlash = discordUtils.isSlashCommand(message);
+  
   if (
     message.channel.type !== ChannelType.PublicThread &&
     message.channel.type !== ChannelType.PrivateThread
@@ -40,20 +46,29 @@ async function handleClearCommand(message, client) {
     );
   }
 
-  let connection;
-  try {
-    connection = await db.pool.getConnection();
-    await connection.beginTransaction();
+  if (!discordUtils.hasBotPermissions(message.channel, [
+    PermissionsBitField.Flags.ManageMessages,
+    PermissionsBitField.Flags.ReadMessageHistory,
+  ])) {
+    return await discordUtils.sendErrorMessage(
+      message,
+      "Bot không có đủ quyền để thực hiện lệnh này.",
+      isSlash
+    );
+  }
 
-    const [threadRows] = await connection.execute(
+  let trx;
+  try {
+    trx = await beginTransaction();
+    const threadRows = await executeQuery(
       "SELECT userId FROM threads WHERE threadId = ?",
       [message.channel.id]
     );
 
-    if (threadRows.length === 0) {
+    if (!threadRows || threadRows.length === 0) {
       return await discordUtils.sendErrorMessage(
         message,
-        "Thread này đã bị xoá dữ liệu chủ đề trước, hãy sử dụng !new <câu hỏi> hoặc /new <câu hỏi> để bắt đầu 1 chủ đề mới",
+        "Thread này đã bị xoá dữ liệu. Hãy sử dụng `/new` hoặc `!new` để bắt đầu chủ đề mới.",
         isSlash
       );
     }
@@ -62,32 +77,15 @@ async function handleClearCommand(message, client) {
     if (userId !== threadRows[0].userId && userId !== config.adminUserId) {
       return await discordUtils.sendErrorMessage(
         message,
-        "Bạn không có quyền.",
-        false
-      );
-    }
-
-    if (
-      !discordUtils.hasBotPermissions(message.channel, [
-        PermissionsBitField.Flags.ManageMessages,
-        PermissionsBitField.Flags.ReadMessageHistory,
-      ])
-    ) {
-      return await discordUtils.sendErrorMessage(
-        message,
-        "Bot không có đủ quyền",
+        "Bạn không có quyền xóa thread này.",
         isSlash
       );
     }
 
-    await connection.execute("DELETE FROM messages WHERE threadId = ?", [
-      message.channel.id,
-    ]);
-    await connection.execute("DELETE FROM threads WHERE threadId = ?", [
-      message.channel.id,
-    ]);
+    await executeQuery("DELETE FROM messages WHERE threadId = ?", [message.channel.id], trx);
+    await executeQuery("DELETE FROM threads WHERE threadId = ?", [message.channel.id], trx);
+    await commitTransaction(trx);
 
-    await connection.commit();
     await discordUtils.safeRenameThread(
       message.channel,
       "🚀 Sẵn sàng tiếp nhận câu hỏi!"
@@ -95,35 +93,40 @@ async function handleClearCommand(message, client) {
 
     const randomClearMessage = getRandomClearMessage();
     const clearMessageWithHelp = `${randomClearMessage} Sử dụng \`/new <câu hỏi>\` hoặc \`!new <câu hỏi>\` để bắt đầu một chủ đề mới.`;
-    const reply = { content: clearMessageWithHelp, ephemeral: isSlash };
-    isSlash ? await message.followUp(reply) : await message.channel.send(reply);
+    
+    if (isSlash) {
+        await message.followUp({ content: clearMessageWithHelp, ephemeral: true });
+    } else {
+        return clearMessageWithHelp;
+    }
   } catch (error) {
-    if (connection) await connection.rollback();
+    if (trx) await rollbackTransaction(trx);
     console.error("Error handling clear command:", error);
     await discordUtils.sendErrorMessage(
       message,
-      "Có lỗi xảy ra khi xóa lịch sử",
+      "Có lỗi xảy ra khi xóa lịch sử.",
       isSlash
     );
   } finally {
-    if (connection) connection.release();
+    if (config.databaseType === 'mysql' && trx) releaseConnection(trx);
   }
 }
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("clear")
-    .setDescription("Xóa lịch sử (người tạo thread/admin).")
+    .setDescription("Xóa lịch sử (chỉ người tạo thread hoặc admin).")
     .setDMPermission(false),
+    
   async execute(interaction) {
     await interaction.deferReply({ ephemeral: true });
-
     try {
-      await handleClearCommand(interaction, interaction.client);
+      await handleClearCommand(interaction);
     } catch (error) {
       console.error("Error in clear command execute:", error);
       await discordUtils.sendErrorMessage(interaction, "Có lỗi khi xoá", true);
     }
   },
+
   handleClearCommand,
 };

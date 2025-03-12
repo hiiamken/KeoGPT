@@ -1,32 +1,28 @@
-// prefixcommands/ranking-gpt.js
 const { handleRankingCommand } = require("../commands/ranking-gpt");
 const { ChannelType } = require("discord.js");
-const config = require("../config");
 
 module.exports = {
-  name: "ranking-gpt",
-  description: "Xem bảng xếp hạng (prefix).",
-  async execute(message, args, client) {
-    if (message.channel.type === ChannelType.DM) {
-      return;
-    }
-    const mockInteraction = {
-      user: message.author,
-      guild: message.guild,
-      reply: async (options) => {
-        return await message.channel.send(options);
-      },
-      followUp: async (options) => {
-        return await message.channel.send(options);
-      },
-      deferReply: async () => {
-        return await message.channel.sendTyping();
-      },
-      client: message.client,
-      author: message.author,
-    };
+    name: "ranking-gpt",
+    description: "Xem bảng xếp hạng (prefix).",
+    async execute(message) {
+        if (message.channel.type === ChannelType.DM) {
+            return;
+        }
 
-    const result = await handleRankingCommand(mockInteraction);
-    await message.channel.send(result);
-  },
+        try {
+            await message.channel.sendTyping();
+
+            const rankingData = await handleRankingCommand({
+                user: message.author,
+                guild: message.guild,
+                channel: message.channel,
+                reply: async (options) => await message.channel.send(options),
+            });
+
+            await message.channel.send(rankingData);
+        } catch (error) {
+            console.error("❌ [execute] Lỗi khi thực hiện prefix ranking-gpt:", error);
+            await message.channel.send("❌ Đã xảy ra lỗi khi lấy bảng xếp hạng.");
+        }
+    },
 };

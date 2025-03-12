@@ -1,28 +1,28 @@
 // prefixcommands/ask.js
 const {
-  handleAskCommand,
-  processImageAttachment,
-  sendMessageAndSave,
+  handleAskCommand,
+  processImageAttachment,
+  sendMessageAndSave,
 } = require("../commands/ask");
 const config = require("../config");
 const { ChannelType, PermissionsBitField } = require("discord.js");
 const discordUtils = require("../utils/discord");
 
 module.exports = {
-  name: "ask",
-  description: "Đặt câu hỏi (prefix).",
-  async execute(message, args) {
-    if (
-      message.channel.type !== ChannelType.GuildText ||
-      message.channelId !== config.allowedChannelId
-    ) {
-      return await discordUtils.sendErrorMessage(
-        message,
-        `Xin lỗi, nhưng hình như bạn lạc đường rồi. Lệnh \`!ask\` này chỉ dùng ở kênh <#${config.allowedChannelId}> thôi nha! 😉`
-      );
-    }
+  name: "ask",
+  description: "Đặt câu hỏi (prefix).",
+  async execute(message, args) {
+    if (
+      message.channel.type !== ChannelType.GuildText ||
+      message.channelId !== config.allowedChannelId
+    ) {
+      return await discordUtils.sendErrorMessage(
+        message,
+        `Xin lỗi, nhưng hình như bạn lạc đường rồi. Lệnh \`!ask\` này chỉ dùng ở kênh <#${config.allowedChannelId}> thôi nha! 😉`
+      );
+    }
 
-    const prompt = args.join(" ");
+    const prompt = args.join(" ");
     if (!prompt) {
       return await discordUtils.sendErrorMessage(
         message,

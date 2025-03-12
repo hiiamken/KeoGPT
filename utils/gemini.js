@@ -1,10 +1,8 @@
-// utils/gemini.js
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const config = require("../config");
 const fs = require("node:fs");
 const path = require("node:path");
-const fetch = (...args) =>
-  import("node-fetch").then(({ default: fetch }) => fetch(...args));
+const fetch = (...args) => import("node-fetch").then(({ default: fetch }) => fetch(...args));
 
 const GEMINI_TIMEOUT = 15000;
 
@@ -16,123 +14,89 @@ async function generateContent(prompt) {
     const result = await Promise.race([
       geminiModel.generateContent(prompt),
       new Promise((_, reject) =>
-        setTimeout(
-          () => reject(new Error("Gemini API timeout")),
-          GEMINI_TIMEOUT
-        )
+        setTimeout(() => reject(new Error("Gemini API timeout")), GEMINI_TIMEOUT)
       ),
     ]);
-    return await result.response.text();
+    return result?.response?.text() || "⚠️ Lỗi: Không nhận được phản hồi từ Gemini.";
   } catch (error) {
     console.error("Gemini API error (generateContent):", error);
-    if (error.message === "Gemini API timeout") {
-      return "Xin lỗi, Gemini API mất quá nhiều thời gian để phản hồi. Bạn vui lòng thử lại sau.";
-    }
-    throw error;
-  }
-}
-async function startChat(history) {
-  try {
-    const chat = geminiModel.startChat({
-      history: history,
-      generationConfig: {
-        maxOutputTokens: 4096,
-      },
-    });
-    return chat;
-  } catch (error) {
-    console.error("Gemini API error (startChat):", error);
-    throw error;
-  }
-}
-
-async function sendMessage(chat, prompt) {
-  try {
-    const result = await Promise.race([
-      chat.sendMessage(prompt),
-      new Promise((_, reject) =>
-        setTimeout(
-          () => reject(new Error("Gemini API timeout")),
-          GEMINI_TIMEOUT
-        )
-      ),
-    ]);
-    return await result.response.text();
-  } catch (error) {
-    console.error("Gemini API error (sendMessage):", error);
-    if (error.message === "Gemini API timeout") {
-      return "Xin lỗi, Gemini API mất quá nhiều thời gian để phản hồi. Bạn vui lòng thử lại sau.";
-    }
-    throw error;
+    return error.message === "Gemini API timeout"
+      ? "⚠️ Xin lỗi, API Gemini mất quá nhiều thời gian để phản hồi. Vui lòng thử lại sau."
+      : "⚠️ Đã xảy ra lỗi khi kết nối với API Gemini.";
   }
 }
 
 async function generateTitle(prompt) {
   const titlePrompt = `Tạo một tiêu đề RẤT NGẮN GỌN (1-5 chữ, tối đa 25 kí tự) cho câu hỏi sau: "${prompt}". CHỈ TRẢ VỀ TIÊU ĐỀ, không giải thích, không giới thiệu, không thêm bất kỳ ký tự nào khác.\nTiêu đề:`;
-  return await generateContent([titlePrompt]);
+  return generateContent([titlePrompt]);
 }
 
 async function generateContentWithHistory(messages) {
-  const chat = await geminiModel.startChat({
-    history: messages,
-    generationConfig: {
-      maxOutputTokens: 4096,
-    },
-  });
+  try {
+    if (!messages || messages.length === 0 || !messages[messages.length - 1]?.parts?.[0]?.text) {
+      throw new Error("⚠️ Lỗi: Dữ liệu lịch sử không hợp lệ.");
+    }
 
-  const result = await chat.sendMessage(
-    messages[messages.length - 1].parts[0].text
-  );
-  return await result.response.text();
-}
+    const chat = await geminiModel.startChat({
+      history: messages,
+      generationConfig: {
+        maxOutputTokens: 4096,
+      },
+    });
 
-function getLanguageInstruction(language) {
-  switch (language) {
-    case "vi":
-      return "Hãy trả lời bằng tiếng Việt. Trình bày lời giải chi tiết, rõ ràng, từng bước. Sử dụng Markdown để định dạng (in đậm, gạch đầu dòng, v.v.). Viết các công thức toán học một cách dễ đọc (ví dụ: f'(x), e^x, x > 0, (0, +∞)).";
-    case "en":
-      return "Please respond in English. Format the response using Markdown.";
-    case "ja":
-      return "日本語で応答してください。 マークダウンを使用して応答をフォーマットします。";
-    case "ko":
-      return "한국어로 응답하십시오. 마크다운을 사용하여 응답 형식을 지정합니다.";
-    case "fr":
-      return "Répondez en français. Formatez la réponse en utilisant Markdown.";
-    case "es":
-      return "Responde en español. Formatea la respuesta usando Markdown.";
-    case "de":
-      return "Antworten Sie auf Deutsch. Formatieren Sie die Antwort mit Markdown.";
-    case "ru":
-      return "Отвечайте на русском языке. Отформатируйте ответ, используя Markdown.";
-    case "zh":
-      return "请用中文回答。使用 Markdown 格式化响应。";
-    case "zh-TW":
-      return "請用繁體中文回答。使用 Markdown 格式化回應。";
-    case "ar":
-      return "الرجاء الرد باللغة العربية. قم بتنسيق الاستجابة باستخدام Markdown.";
-    default:
-      return `Please respond in ${language}. Format the response using Markdown.`;
+    const result = await chat.sendMessage(messages[messages.length - 1].parts[0].text);
+    return result?.response?.text() || "⚠️ Lỗi: Không nhận được phản hồi từ Gemini.";
+  } catch (error) {
+    console.error("Gemini API error (generateContentWithHistory):", error);
+    return "⚠️ Đã xảy ra lỗi khi xử lý dữ liệu.";
   }
 }
 
-function fileToGenerativePart(path, mimeType) {
-  return {
-    inlineData: {
-      data: Buffer.from(fs.readFileSync(path)).toString("base64"),
-      mimeType,
-    },
-  };
+const languageInstructions = Object.freeze({
+  vi: "Hãy trả lời bằng tiếng Việt. Trình bày lời giải chi tiết, rõ ràng, từng bước. Sử dụng Markdown để định dạng (in đậm, gạch đầu dòng, v.v.). Viết các công thức toán học một cách dễ đọc (ví dụ: f'(x), e^x, x > 0, (0, +∞)).",
+  en: "Please respond in English. Format the response using Markdown.",
+  ja: "日本語で応答してください。 マークダウンを使用して応答をフォーマットします。",
+  ko: "한국어로 응답하십시오. 마크다운을 사용하여 응답 형식을 지정합니다.",
+  fr: "Répondez en français. Formatez la réponse en utilisant Markdown.",
+  es: "Responde en español. Formatea la respuesta usando Markdown.",
+  de: "Antworten Sie auf Deutsch. Formatieren Sie die Antwort mit Markdown.",
+  ru: "Отвечайте на русском языке. Отформатируйте ответ, используя Markdown.",
+  zh: "请用中文回答。使用 Markdown 格式化响应。",
+  "zh-TW": "請用繁體中文回答。使用 Markdown 格式化回應。",
+  ar: "الرجاء الرد باللغة العربية. قم بتنسيق الاستجابة باستخدام Markdown.",
+});
+
+function getLanguageInstruction(language) {
+  return languageInstructions[language] || `Please respond in ${language}. Format the response using Markdown.`;
+}
+
+function fileToGenerativePart(filePath, mimeType) {
+  try {
+    return {
+      inlineData: {
+        data: Buffer.from(fs.readFileSync(filePath)).toString("base64"),
+        mimeType,
+      },
+    };
+  } catch (error) {
+    console.error("Error reading file for Gemini API:", error);
+    return null;
+  }
 }
 
 async function downloadImage(url, filename) {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(
-      `Failed to download image: ${response.status} ${response.statusText}`
-    );
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`⚠️ Failed to download image: ${response.status} ${response.statusText}`);
+    }
+
+    const buffer = await response.arrayBuffer();
+    fs.writeFileSync(filename, Buffer.from(buffer));
+  } catch (error) {
+    console.error("Error downloading image:", error);
+    throw error;
   }
-  const buffer = await response.arrayBuffer();
-  fs.writeFileSync(filename, Buffer.from(buffer));
 }
 
 module.exports = {

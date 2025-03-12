@@ -1,13 +1,12 @@
-// prefixcommands/clear.js
 const { handleClearCommand } = require("../commands/clear");
 const config = require("../config");
-const { ChannelType, PermissionsBitField } = require("discord.js");
+const { ChannelType } = require("discord.js");
 const discordUtils = require("../utils/discord");
 
 module.exports = {
   name: "clear",
   description: "Xóa lịch sử trò chuyện trong database (prefix).",
-  async execute(message, args, client) {
+  async execute(message) {
     if (
       message.channel.type !== ChannelType.PublicThread &&
       message.channel.type !== ChannelType.PrivateThread
@@ -18,21 +17,9 @@ module.exports = {
     if (message.channel.parentId !== config.allowedChannelId) {
       return;
     }
-    try {
-      const mockInteraction = {
-        user: message.author,
-        channel: message.channel,
-        guild: message.guild,
-        reply: async (options) => {
-          return await message.channel.send(options);
-        },
-        followUp: async (options) => {
-          return await message.channel.send(options);
-        },
-        client: message.client,
-      };
 
-      const result = await handleClearCommand(mockInteraction, false);
+    try {
+      const result = await handleClearCommand(message);
       if (result) {
         await message.channel.send(result);
       }

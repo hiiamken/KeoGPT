@@ -1,23 +1,28 @@
-// utils/help.js
 const config = require("../config");
 
-function getRandomLoadingMessage() {
-  const loadingMessages = [
-    `${config.loadingEmoji} Để xem nào...`,
-    `${config.loadingEmoji} Hmm, câu hỏi hay đó, đợi chút nhé...`,
-    `${config.loadingEmoji} Đang vắt óc suy nghĩ...`,
-    `${config.loadingEmoji} Đang lật tung sách vở tìm câu trả lời...`,
-    `${config.loadingEmoji} Hỏi anh Google tí đã...`,
-    `${config.loadingEmoji} Đợi xíu, đang bận "hack" NASA tìm đáp án...`,
-    `${config.loadingEmoji} Bình tĩnh, bình tĩnh... đáp án sắp ra lò rồi!`,
-    `${config.loadingEmoji} Đang pha trà, nhâm nhi và tìm câu trả lời...`,
-    `${config.loadingEmoji} A! Có ngay đây, đợi xíu...`,
-    `${config.loadingEmoji} Đang kết nối với vũ trụ tri thức...`,
-  ];
-  return loadingMessages[Math.floor(Math.random() * loadingMessages.length)];
+// Hàm lấy phần tử ngẫu nhiên từ mảng
+function getRandomElement(array) {
+  return array[Math.floor(Math.random() * array.length)];
 }
 
-const helpSuggestions = [
+const loadingMessages = Object.freeze([
+  `${config.loadingEmoji} Để xem nào...`,
+  `${config.loadingEmoji} Hmm, câu hỏi hay đó, đợi chút nhé...`,
+  `${config.loadingEmoji} Đang vắt óc suy nghĩ...`,
+  `${config.loadingEmoji} Đang lật tung sách vở tìm câu trả lời...`,
+  `${config.loadingEmoji} Hỏi anh Google tí đã...`,
+  `${config.loadingEmoji} Đợi xíu, đang bận "hack" NASA tìm đáp án...`,
+  `${config.loadingEmoji} Bình tĩnh, bình tĩnh... đáp án sắp ra lò rồi!`,
+  `${config.loadingEmoji} Đang pha trà, nhâm nhi và tìm câu trả lời...`,
+  `${config.loadingEmoji} A! Có ngay đây, đợi xíu...`,
+  `${config.loadingEmoji} Đang kết nối với vũ trụ tri thức...`,
+]);
+
+function getRandomLoadingMessage() {
+  return getRandomElement(loadingMessages);
+}
+
+const helpSuggestions = Object.freeze([
   "Có vẻ bạn đang bối rối. 🤔  Hãy thử `!gpthelp` xem sao!",
   "Bạn cần giúp đỡ?   `!gpthelp` là bạn của bạn!",
   "Lạc lối rồi hả?   Để tôi chỉ đường cho, gõ `!gpthelp` nhé!",
@@ -31,13 +36,13 @@ const helpSuggestions = [
   "Alo alo, `!gpthelp` nghe rõ trả lời!",
   "Nghe đồn `!gpthelp` có thể giải quyết mọi vấn đề.  Thử xem sao!",
   "Đừng ngại, cứ `!gpthelp` mà gõ, có gì khó để bot lo!",
-];
+]);
 
 function getRandomHelpSuggestion() {
-  return helpSuggestions[Math.floor(Math.random() * helpSuggestions.length)];
+  return getRandomElement(helpSuggestions);
 }
 
-const afterReplySuggestions = [
+const afterReplySuggestions = Object.freeze([
   'Xong rồi đó! Còn thắc mắc gì về "**THREADNAME**" không nè? Cứ `/reply <câu hỏi>` hoặc `!reply <câu hỏi>` để tiếp tục, hoặc `/clear` rồi `/new <câu hỏi>` (hay `!new <câu hỏi>`) để hỏi về một vấn đề khác nha! 😉',
   "Đây là câu trả lời siêu xịn từ KeoGPT! Về \"**THREADNAME**\", bạn cứ `/reply` hoặc `!reply` để hỏi thêm, còn nếu muốn 'đổi gió' thì `/clear` trước rồi `/new` hoặc `!new` câu hỏi mới toanh nhé. 😊",
   "KeoGPT đã 'ra tay', vấn đề \"**THREADNAME**\" đã được giải quyết! `/reply`, `!reply` để hỏi tiếp, hoặc `/clear` và `/new` (hay `!new`) để 'khai trương' chủ đề mới nha bạn ơi. 😎",
@@ -50,16 +55,11 @@ const afterReplySuggestions = [
   'Hỏi một câu về "**THREADNAME**", biết thêm một điều. Cứ `/reply` hoặc `!reply` nhé! Còn muốn hỏi nhiều điều hơn thì `/clear` rồi `/new` hoặc `!new` để KeoGPT trổ tài tiếp nè! 😊',
   "Hài lòng chưa, hài lòng chưa? KeoGPT xứng đáng 10 điểm với câu trả lời về \"**THREADNAME**\" nha! 😜 `/reply` hoặc `!reply` để 'thách đấu' tiếp, hoặc `/clear` rồi `/new` (hay `!new`) để 'lên level' nào! (Hỏi tiếp đi!)",
   "Tớ là KeoGPT, không ngại trả lời về \"**THREADNAME**\", chỉ cần bạn `/reply` hoặc `!reply` thôi! Còn muốn 'thử lửa' thì `/clear` rồi `/new` hoặc `!new` nha. 😎",
-];
+]);
 
 function getRandomReplySuggestion(threadName) {
-  const suggestion =
-    afterReplySuggestions[
-      Math.floor(Math.random() * afterReplySuggestions.length)
-    ];
-  return suggestion.replace("THREADNAME", threadName);
+  return getRandomElement(afterReplySuggestions).replace("THREADNAME", threadName);
 }
-// *****
 
 module.exports = {
   getRandomHelpSuggestion,

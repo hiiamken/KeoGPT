@@ -1,278 +1,173 @@
-// utils/discord.js
-const {
-  ChannelType,
-  PermissionsBitField,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  EmbedBuilder,
-} = require("discord.js");
-const config = require("../config");
-const { getRandomHelpSuggestion, getRandomLoadingMessage } = require("./help");
-
-function isSlashCommand(message) {
-  return (
-    message.type === "APPLICATION_COMMAND" || message.isChatInputCommand?.()
-  );
-}
-
-function createResponseStyleButtons() {
-  return new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId("simple")
-      .setLabel("Đơn giản")
-      .setStyle(ButtonStyle.Primary),
-    new ButtonBuilder()
-      .setCustomId("professional")
-      .setLabel("Chuyên nghiệp")
-      .setStyle(ButtonStyle.Primary)
-  );
-}
-
-function hasBotPermissions(channel, permissions) {
-  if (!channel || !channel.guild) {
-    return false;
-  }
-  const botMember = channel.guild.members.me;
-  if (!botMember) return false;
-  return channel.permissionsFor(botMember).has(permissions);
-}
-
-async function sendErrorMessage(message, content, ephemeral = false) {
-  const replyOptions = {
-    content,
-    ephemeral,
-    allowedMentions: { repliedUser: false },
-  };
-  try {
-    if (isSlashCommand(message)) {
-      if (message.deferred || message.replied) {
-        await message.followUp(replyOptions);
-      } else {
-        await message.reply(replyOptions);
-      }
-    } else {
-      await message.reply(replyOptions);
-    }
-  } catch (error) {
-    console.error("Failed to send error message:", error);
-  }
-}
-
-async function safeDeleteMessage(message) {
-  if (!message || !message.delete) return;
-  try {
-    await message.delete();
-  } catch (error) {
-    console.warn(`Failed to delete message: ${error.message}`);
-  }
-}
-
-async function safeRenameThread(thread, newName) {
-  try {
-    await thread.setName(newName);
-  } catch (error) {
-    console.error("Lỗi đổi tên thread:", error);
-    if (error.code === 50013) {
-      sendErrorMessage(thread, "Bot không có quyền đổi tên thread này!");
-    }
-  }
-}
+const config = require('../config');
 
 function createMockSlashInteraction(
-  commandName,
-  options = {},
-  userId = "1234567890",
-  channelId = config.allowedChannelId,
-  guildId = "test-guild-id"
-) {
-  return {
-    isChatInputCommand: () => true,
     commandName,
-    options: {
-      getString: (name) => options[name] || null,
-      getAttachment: (name) => options[name] || null,
-      getBoolean: (name) => options[name] || null,
-      getUser: (name) => {
-        if (name === "target" && options.subcommand === "user") {
-          return { id: options.target };
-        }
-        return null;
-      },
-      getSubcommand: () => options.subcommand || null,
-    },
-    user: {
-      id: userId,
-      username: `User${userId}`,
-      displayAvatarURL: () => "https://example.com/default-avatar.png",
-    },
-    channelId,
-    guild: { id: guildId },
-    channel: {
-      type: "GUILD_TEXT",
-      id: channelId,
-      sendTyping: () => Promise.resolve(),
-      send: (content) => Promise.resolve({ content }),
-      threads: {
-        create: (data) =>
-          Promise.resolve({
-            id: "thread123",
-            send: (msg) => Promise.resolve({ content: msg }),
-            setName: (name) => Promise.resolve(),
-          }),
-      },
-      isThread: () => false,
-      ownerId: "someOwnerId",
-      parentId: config.allowedChannelId,
-      guild: {
-        members: {
-          me: {
-            permissionsIn: (ch) => ({
-              has: (perms) => {
-                return true;
-              },
-            }),
-          },
+    options = {},
+    userId = "1234567890",
+    channelId = config.allowedChannelId,
+    guildId = "test-guild-id"
+) {
+    const getOption = (name) => options[name] || null;
+
+    return {
+        isChatInputCommand: () => true,
+        commandName,
+        options: {
+            getString: getOption,
+            getAttachment: getOption,
+            getBoolean: getOption,
+            getInteger: getOption,
+            getUser: (name) => name === "target" && options.subcommand === "user" ? { id: options.target } : null,
+            getSubcommand: () => options.subcommand || null,
         },
-      },
-      permissionsFor: (member) => {
-        return {
-          has: (permissions) => {
-            return true;
-          },
-        };
-      },
-    },
-    client: {
-      user: {
-        id: "some_bot_id",
-        username: "KeoGPT",
-        avatarURL: () => "https://example.com/bot_avatar.png",
-      },
-    },
-    deferReply: (opts) => Promise.resolve(),
-    followUp: (content) => Promise.resolve({ content }),
-    reply: (options) => {
-      return Promise.resolve({
-        content: options.content,
-        createMessageComponentCollector: () => {
-          return {
-            on: (event, callback) => {
-              if (event === "collect") {
-                callback({
-                  customId: "confirm",
-                  user: { id: userId },
-                  deferUpdate: () => Promise.resolve(),
-                  update: (options) => Promise.resolve(),
-                });
-              } else if (event === "end") {
-                callback([]);
-              }
+        user: {
+            id: userId,
+            username: `User${userId}`,
+            displayAvatarURL: () => "https://example.com/default-avatar.png",
+        },
+        channelId,
+        guild: { id: guildId },
+        channel: {
+            type: "GUILD_TEXT",
+            id: channelId,
+            sendTyping: () => Promise.resolve(),
+            send: (content) => Promise.resolve({ content }),
+            threads: {
+                create: (data) =>
+                    Promise.resolve({
+                        id: "test-thread-id",
+                        send: (msg) => Promise.resolve({ content: msg }),
+                        setName: (name) => Promise.resolve(),
+                    }),
             },
-          };
+            isThread: () => false,
+            ownerId: userId,
+            parentId: config.allowedChannelId,
+            guild: {
+                members: {
+                    me: {
+                        permissionsIn: () => ({
+                            has: () => true
+                        })
+                    }
+                }
+            },
+            permissionFor: () => ({
+                has: () => true
+            })
         },
-        edit: (options) => {
-          return Promise.resolve({ content: options.content });
+        client: {
+            user: {
+                id: "some_bot_id",
+                username: "KeoGPT",
+                avatarURL: () => "https://example.com/bot_avatar.png",
+            },
         },
-      });
-    },
-    isReplied: false,
-    isDeferred: false,
-  };
+        deferReply: () => Promise.resolve(),
+        followUp: (content) => Promise.resolve({ content }),
+        reply: (options) => Promise.resolve({ content: options.content }),
+        isReplied: false,
+        isDeferred: false,
+    };
 }
 
 function createMockPrefixMessage(
-  content,
-  authorId = "4567890123",
-  channelId = config.allowedChannelId,
-  attachments = []
-) {
-  const mockAttachments = attachments.map((attachment) => ({
-    name: attachment.name,
-    url: attachment.url,
-    contentType: attachment.contentType,
-  }));
-
-  return {
     content,
-    author: {
-      id: authorId,
-      username: `User${authorId}`,
-      displayAvatarURL: () => "https://example.com/default-avatar.png",
-    },
-    channelId,
-    attachments: {
-      size: mockAttachments.length,
-      map: () => mockAttachments,
-      first: () => (mockAttachments.length > 0 ? mockAttachments[0] : null),
-    },
-    reply: (msg) => Promise.resolve({ content: msg }),
-    react: (emoji) => Promise.resolve(),
-    guild: {
-      id: "test-guild-id",
-    },
-    isChatInputCommand: () => false,
-    channel: {
-      type: "GUILD_TEXT",
-      id: channelId,
-      sendTyping: () => Promise.resolve(),
-      send: (content) => Promise.resolve({ content }),
-      threads: {
-        create: (data) =>
-          Promise.resolve({
-            id: "thread123",
-            send: (msg) => Promise.resolve({ content: msg }),
-            setName: (name) => Promise.resolve(),
-          }),
-      },
-      isThread: () => true,
-      ownerId: "someOwnerId",
-      parentId: config.allowedChannelId,
-      guild: {
-        members: {
-          me: {
-            permissionsIn: (ch) => ({
-              has: (perms) => {
-                return true;
-              },
-            }),
-          },
-        },
-      },
-      permissionsFor: (member) => {
-        return {
-          has: (permissions) => {
-            return true;
-          },
-        };
-      },
-    },
-    client: {
-      user: {
-        id: "some_bot_id",
-        username: "KeoGPT",
-        avatarURL: () => "https://example.com/bot_avatar.png",
-      },
-    },
-  };
-}
-function createCodeEmbed(code, language = "python", title = "Code") {
-  const embed = new EmbedBuilder()
-    .setColor("#0099ff")
-    .setTitle(title)
-    .setDescription(`\`\`\`${language}\n${code}\n\`\`\``);
+    authorId = "4567890123",
+    channelId = config.allowedChannelId,
+    attachments = []
+) {
+    const mockAttachments = attachments.map((attachment) => ({
+        name: attachment.name,
+        url: attachment.url,
+        contentType: attachment.contentType,
+    }));
 
-  return embed;
+    return {
+        content,
+        author: {
+            id: authorId,
+            username: `User${authorId}`,
+            displayAvatarURL: () => "https://example.com/default-avatar.png",
+        },
+        channelId,
+        attachments: {
+            size: mockAttachments.length,
+            map: () => mockAttachments,
+            first: () => (mockAttachments.length > 0 ? mockAttachments[0] : null),
+        },
+        reply: (msg) => Promise.resolve({ content: msg }),
+        react: (emoji) => Promise.resolve(),
+        guild: { id: "test-guild-id" },
+        isChatInputCommand: () => false,
+        channel: {
+            type: "GUILD_TEXT",
+            id: channelId,
+            sendTyping: () => Promise.resolve(),
+            send: (content) => Promise.resolve({ content }),
+            threads: {
+                create: (data) =>
+                    Promise.resolve({
+                        id: "thread123",
+                        send: (msg) => Promise.resolve({ content: msg }),
+                        setName: (name) => Promise.resolve(),
+                    }),
+            },
+            isThread: () => true,
+            ownerId: authorId,
+            parentId: config.allowedChannelId,
+            guild: {
+                members: {
+                    me: {
+                        permissionsIn: () => ({
+                            has: () => true
+                        })
+                    }
+                }
+            },
+            permissionFor: () => ({
+                has: () => true
+            })
+        },
+        client: {
+            user: {
+                id: "some_bot_id",
+                username: "KeoGPT",
+                avatarURL: () => "https://example.com/bot_avatar.png",
+            },
+        },
+    };
+}
+
+async function sendErrorMessage(target, message) {
+    try {
+        if (target.isChatInputCommand && target.isChatInputCommand()) {
+            if (target.deferred || target.replied) {
+                await target.followUp({ content: `❌ ${message}`, ephemeral: true });
+            } else {
+                await target.reply({ content: `❌ ${message}`, ephemeral: true });
+            }
+        } else {
+            await target.reply(`❌ ${message}`);
+        }
+    } catch (error) {
+        console.error("❌ Error sending error message:", error);
+    }
+}
+
+function hasBotPermissions(channel, permissions) {
+    if (!channel.guild || !channel.guild.members || !channel.guild.members.me) return false;
+    return channel.guild.members.me.permissionsIn(channel).has(permissions, true);
+}
+
+function isSlashCommand(interaction) {
+    return interaction.isChatInputCommand();
 }
 
 module.exports = {
-  isSlashCommand,
-  createResponseStyleButtons,
-  hasBotPermissions,
-  sendErrorMessage,
-  safeDeleteMessage,
-  safeRenameThread,
-  createMockPrefixMessage,
-  createMockSlashInteraction,
-  createCodeEmbed,
+    createMockSlashInteraction,
+    createMockPrefixMessage,
+    sendErrorMessage,
+    hasBotPermissions,
+    isSlashCommand,
 };

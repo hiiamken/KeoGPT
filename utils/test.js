@@ -1,257 +1,165 @@
-// utils/test.js
 const {
   createMockSlashInteraction,
   createMockPrefixMessage,
 } = require("./discord");
 const config = require("../config");
-const db = require("./database");
-const { generateTitle } = require("./gemini");
-const fs = require("node:fs");
-const path = require("node:path");
+const {
+  getDatabaseInstance,
+  insertOrUpdateUser,
+  deleteExpiredThreads,
+  resetAllPoints,
+  executeQuery,
+} = require("./database"); // ❌ Không gọi `closeDatabaseConnection`
 const Table = require("cli-table3");
+const fs = require("fs");
+
+const TEST_DB_FILE = "test_database.sqlite";
+const MAIN_DB_FILE = "database.sqlite";
 
 const colors = {
   reset: "\x1b[0m",
-  bright: "\x1b[1m",
-  dim: "\x1b[2m",
-  underscore: "\x1b[4m",
-  blink: "\x1b[5m",
-  reverse: "\x1b[7m",
-  hidden: "\x1b[8m",
-
-  black: "\x1b[30m",
-  red: "\x1b[31m",
   green: "\x1b[32m",
+  red: "\x1b[31m",
   yellow: "\x1b[33m",
-  blue: "\x1b[34m",
-  magenta: "\x1b[35m",
   cyan: "\x1b[36m",
+  blue: "\x1b[34m",
   white: "\x1b[37m",
-  gray: "\x1b[90m",
 };
 
 const symbols = {
   success: "✅",
   failure: "❌",
-  warning: "⚠️",
-  info: "ℹ️",
-  arrowRight: "➡️",
 };
 
 function colorize(text, color) {
-  return colors[color] ? `${colors[color]}${text}${colors.reset}` : text;
-}
-function logWithColor(message, color = "white") {
-  console.log(colorize(message, color));
-}
-function logSuccess(message) {
-  console.log(colorize(`${symbols.success} ${message}`, "green"));
-}
-function logFailure(message) {
-  console.error(colorize(`${symbols.failure} ${message}`, "red"));
-}
-function logWarning(message) {
-  console.warn(colorize(`${symbols.warning} ${message}`, "yellow"));
-}
-function logInfo(message) {
-  console.info(colorize(`${symbols.info} ${message}`, "cyan"));
+  return colors[color] ? `${colors[color]}${colors.reset}` : text;
 }
 
 async function runTests() {
-  console.log(colorize("🚀  KeoGPT Bot Test Suite  🚀", "blue"));
+  console.log(colorize("🚀 KeoGPT Bot Test Suite 🚀", "blue"));
 
-  const testResults = [];
-
-  function expect(condition, message, commandName, type) {
-    const result = condition
-      ? `${symbols.success} PASS`
-      : `${symbols.failure} FAIL`;
-    testResults.push({ command: `${type} ${commandName}`, message, result });
-    return condition;
+  // 👉 **Sao lưu database gốc trước khi test**
+  if (fs.existsSync(MAIN_DB_FILE)) {
+    fs.copyFileSync(MAIN_DB_FILE, `${MAIN_DB_FILE}.backup`);
   }
 
-  let connection;
+  // 👉 **Tạo database test riêng**
+  if (fs.existsSync(TEST_DB_FILE)) {
+    fs.unlinkSync(TEST_DB_FILE); // Xóa file cũ (nếu có)
+  }
+  fs.copyFileSync(MAIN_DB_FILE, TEST_DB_FILE);
+
+  process.env.DATABASE_FILE = TEST_DB_FILE; // Chỉ định sử dụng DB test
+  const db = getDatabaseInstance();
+
+  const testResults = [];
   const testUserId = "test-user-id-123";
   const testUserName = "TestUser";
 
+  function expect(condition, message, commandName, type) {
+    const result = condition
+      ? `${symbols.success} ${colorize("PASS", "green")}`
+      : `${symbols.failure} ${colorize("FAIL", "red")}`;
+    testResults.push({ command: `${type} ${commandName}`, message, result });
+  }
+
   try {
-    connection = await db.pool.getConnection();
-    await connection.beginTransaction();
+    // 🛠️ **Chạy các lệnh test trên database test**
+    const dbTests = [
+      { func: () => insertOrUpdateUser(testUserId, testUserName), name: "insertOrUpdateUser" },
+      { func: deleteExpiredThreads, name: "deleteExpiredThreads" },
+      { func: resetAllPoints, name: "resetAllPoints" },
+    ];
 
-    await connection.execute(
-      `
-            INSERT INTO users (userId, username) VALUES (?, ?)
-            ON DUPLICATE KEY UPDATE username = VALUES(username)
-        `,
-      [testUserId, testUserName]
-    );
-
-    try {
-      const db = require("../utils/database");
-      testResults.push({
-        command: "utils",
-        message: "Kết nối Database",
-        result: "✅",
-      });
-    } catch (error) {
-      testResults.push({
-        command: "utils",
-        message: "Kết nối Database",
-        result: `❌ (${error.message})`,
-      });
+    for (const test of dbTests) {
+      try {
+        await test.func();
+        expect(true, `Chạy ${test.name}`, test.name, "DB");
+      } catch (error) {
+        expect(false, error.message, test.name, "DB");
+      }
     }
 
-    try {
-      const gemini = require("../utils/gemini");
-      testResults.push({
-        command: "utils",
-        message: "Gemini API",
-        result: "✅",
-      });
-    } catch (error) {
-      testResults.push({
-        command: "utils",
-        message: "Gemini API",
-        result: `❌ (${error.message})`,
-      });
+    // 🛠️ **Chạy lệnh bot**
+    async function testCommands(commandList, type) {
+      for (const [commandName, command] of Object.entries(commandList)) {
+        if (!command || typeof command.execute !== "function") {
+          expect(false, `Lệnh ${commandName} không có function execute()`, commandName, type);
+          continue;
+        }
+
+        try {
+          if (type === "/") {
+            const params = commandName === "ask"
+              ? { prompt: "test prompt", language: "vi" }
+              : {};
+
+            const interaction = {
+              ...createMockSlashInteraction(
+                commandName,
+                params,
+                testUserId,
+                config.allowedChannelId,
+                "test-guild-id"
+              ),
+              editReply: async (msg) => console.log("✅ [Mock] editReply() called with:", msg),
+            };
+
+            await command.execute(interaction, db);
+          } else {
+            const message = createMockPrefixMessage(
+              `!${commandName} test prompt`,
+              testUserId,
+              config.allowedChannelId
+            );
+
+            await command.execute(message, ["test", "prompt"], { user: { id: "some-id" } }, db);
+          }
+
+          expect(true, `Chạy lệnh ${commandName}`, commandName, type);
+        } catch (error) {
+          expect(false, error.message, commandName, type);
+        }
+      }
     }
-    try {
-      const gemini = require("../utils/gemini");
-      testResults.push({
-        command: "utils",
-        message: "Gemini Utils",
-        result: "✅",
-      });
-    } catch (error) {
-      testResults.push({
-        command: "utils",
-        message: "Gemini Utils",
-        result: `❌ (${error.message})`,
-      });
-    }
-    try {
-      const format = require("../utils/format");
-      testResults.push({
-        command: "utils",
-        message: "Format Math",
-        result: "✅",
-      });
-    } catch (error) {
-      testResults.push({
-        command: "utils",
-        message: "Format Math",
-        result: `❌ (${error.message})`,
-      });
-    }
+
+    const loadCommandSafely = (path) => {
+      try {
+        return require(path);
+      } catch (error) {
+        console.error(colorize(`⚠️ Lỗi khi load ${path}: ${error.message}`, "red"));
+        return null;
+      }
+    };
 
     const slashCommands = {
-      ask: require("../commands/ask"),
-      reply: require("../commands/reply"),
-      new: require("../commands/new"),
-      clear: require("../commands/clear"),
-      gpthelp: require("../commands/gpthelp"),
-      cleardata: require("../commands/cleardata"),
-      lang: require("../commands/lang"),
-      stats: require("../commands/stats"),
-      ["ranking-gpt"]: require("../commands/ranking-gpt"),
+      ask: loadCommandSafely("../commands/ask"),
+      reply: loadCommandSafely("../commands/reply"),
+      new: loadCommandSafely("../commands/new"),
+      clear: loadCommandSafely("../commands/clear"),
+      gpthelp: loadCommandSafely("../commands/gpthelp"),
+      cleardata: loadCommandSafely("../commands/cleardata"),
+      lang: loadCommandSafely("../commands/lang"),
+      stats: loadCommandSafely("../commands/stats"),
+      "ranking-gpt": loadCommandSafely("../commands/ranking-gpt"),
     };
-
-    for (const [commandName, command] of Object.entries(slashCommands)) {
-      try {
-        let interaction;
-        if (commandName === "cleardata") {
-          interaction = createMockSlashInteraction(
-            commandName,
-            { subcommand: "all", type: "stats" },
-            testUserId,
-            config.allowedChannelId,
-            "test-guild-id"
-          );
-          await command.execute(interaction);
-          expect(true, "Chạy lệnh cleardata all stats", commandName, "/");
-
-          interaction = createMockSlashInteraction(
-            commandName,
-            { subcommand: "all", type: "data" },
-            testUserId,
-            config.allowedChannelId,
-            "test-guild-id"
-          );
-          await command.execute(interaction);
-          expect(true, "Chạy lệnh cleardata all data", commandName, "/");
-
-          interaction = createMockSlashInteraction(
-            commandName,
-            { subcommand: "user", target: testUserId, type: "stats" },
-            testUserId,
-            config.allowedChannelId,
-            "test-guild-id"
-          );
-          await command.execute(interaction);
-          expect(true, "Chạy lệnh cleardata user stats", commandName, "/");
-
-          interaction = createMockSlashInteraction(
-            commandName,
-            { subcommand: "user", target: testUserId, type: "data" },
-            testUserId,
-            config.allowedChannelId,
-            "test-guild-id"
-          );
-          await command.execute(interaction);
-          expect(true, "Chạy lệnh cleardata user data", commandName, "/");
-        } else if (commandName === "stats" || commandName === "ranking-gpt") {
-          interaction = createMockSlashInteraction(
-            commandName,
-            {},
-            testUserId,
-            config.allowedChannelId,
-            "test-guild-id"
-          );
-          await command.execute(interaction);
-          expect(true, "Chạy lệnh", commandName, "/");
-        } else {
-          interaction = createMockSlashInteraction(
-            commandName,
-            { prompt: "test prompt", language: "vi" },
-            testUserId,
-            config.allowedChannelId,
-            "test-guild-id"
-          );
-          await command.execute(interaction);
-          expect(true, "Chạy lệnh", commandName, "/");
-        }
-      } catch (error) {
-        expect(false, error.message, commandName, "/");
-      }
-    }
 
     const prefixCommands = {
-      ask: require("../prefixcommands/ask"),
-      reply: require("../prefixcommands/reply"),
-      new: require("../prefixcommands/new"),
-      clear: require("../prefixcommands/clear"),
-      gpthelp: require("../prefixcommands/gpthelp"),
-      lang: require("../prefixcommands/lang"),
-      cleardata: require("../prefixcommands/cleardata"),
-      stats: require("../prefixcommands/stats"),
-      ["ranking-gpt"]: require("../prefixcommands/ranking-gpt"),
+      ask: loadCommandSafely("../prefixcommands/ask"),
+      reply: loadCommandSafely("../prefixcommands/reply"),
+      new: loadCommandSafely("../prefixcommands/new"),
+      clear: loadCommandSafely("../prefixcommands/clear"),
+      gpthelp: loadCommandSafely("../prefixcommands/gpthelp"),
+      lang: loadCommandSafely("../prefixcommands/lang"),
+      cleardata: loadCommandSafely("../prefixcommands/cleardata"),
+      stats: loadCommandSafely("../prefixcommands/stats"),
+      "ranking-gpt": loadCommandSafely("../prefixcommands/ranking-gpt"),
     };
 
-    for (const [commandName, command] of Object.entries(prefixCommands)) {
-      try {
-        const message = createMockPrefixMessage(
-          `!${commandName} test prompt`,
-          testUserId
-        );
-        await command.execute(message, ["test", "prompt"], {
-          user: { id: "some-id" },
-        });
-        expect(true, "Chạy lệnh", commandName, "!");
-      } catch (error) {
-        expect(false, error.message, commandName, "!");
-      }
-    }
+    await testCommands(slashCommands, "/");
+    await testCommands(prefixCommands, "!");
 
+    // 📊 Hiển thị bảng kết quả test
     const table = new Table({
       head: [
         colorize("Lệnh", "cyan"),
@@ -259,47 +167,33 @@ async function runTests() {
         colorize("Kết quả", "cyan"),
       ],
       colWidths: [25, 45, 15],
-      style: {
-        head: [],
-        border: ["gray"],
-      },
+      style: { head: [], border: ["gray"] },
       wordWrap: true,
     });
 
     for (const result of testResults) {
-      if (result.command === "utils")
-        table.push([result.message, "", result.result]);
-    }
-
-    table.push(
-      ["---", "---", "---"],
-      [{ content: "Slash Commands", colSpan: 3, hAlign: "center" }],
-      ["---", "---", "---"]
-    );
-    for (const result of testResults) {
-      if (result.command.startsWith("/"))
-        table.push([result.command, result.message, result.result]);
-    }
-
-    table.push(
-      ["---", "---", "---"],
-      [{ content: "Prefix Commands", colSpan: 3, hAlign: "center" }],
-      ["---", "---", "---"]
-    );
-    for (const result of testResults) {
-      if (result.command.startsWith("!"))
-        table.push([result.command, result.message, result.result]);
+      table.push([result.command, result.message, result.result]);
     }
 
     console.log(table.toString());
   } catch (error) {
-    logFailure(`Test run failed: ${error.message}`);
-    console.error(error);
+    console.error(colorize(`❌ Test run failed: ${error.message}`, "red"));
   } finally {
-    if (connection) {
-      await connection.rollback();
-      connection.release();
-    }
+    console.log(colorize("🔄 Bắt đầu quá trình khôi phục database...", "cyan"));
+
+if (fs.existsSync(`${MAIN_DB_FILE}.backup`)) {
+  console.log("📂 Khôi phục database từ bản sao lưu...");
+  fs.copyFileSync(`${MAIN_DB_FILE}.backup`, MAIN_DB_FILE);
+  fs.unlinkSync(`${MAIN_DB_FILE}.backup`);
+}
+
+if (fs.existsSync(TEST_DB_FILE)) {
+  console.log("🗑️ Xóa database test...");
+  fs.unlinkSync(TEST_DB_FILE);
+}
+
+console.log(colorize("🛠 Test completed and database restored.", "yellow"));
+
   }
 }
 

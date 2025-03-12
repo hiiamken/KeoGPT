@@ -1,4 +1,3 @@
-// prefixcommands/reply.js (Đã sửa đổi)
 const { handleReplyCommand } = require("../commands/reply");
 const config = require("../config");
 const { ChannelType, PermissionsBitField } = require("discord.js");
@@ -6,25 +5,38 @@ const discordUtils = require("../utils/discord");
 
 module.exports = {
   name: "reply",
-  description: "Trả lời trong thread hiện tại (prefix command)",
+  description: "Trả lời trong thread hiện tại (prefix).",
+  
   async execute(message, args) {
+    if (message.channel.type === ChannelType.DM) {
+      return; // Không hỗ trợ trong tin nhắn riêng
+    }
+
     if (
       message.channel.type !== ChannelType.PublicThread &&
       message.channel.type !== ChannelType.PrivateThread
     ) {
-      return;
-    }
-    if (message.channel.parentId !== config.allowedChannelId) {
-      return;
-    }
-
-    const prompt = args.join(" ");
-    if (!prompt) {
       return await discordUtils.sendErrorMessage(
         message,
-        "Bạn cần nhập nội dung trả lời!"
+        "❌ Lệnh này chỉ được dùng trong một thread!"
       );
     }
+
+    if (message.channel.parentId !== config.allowedChannelId) {
+      return await discordUtils.sendErrorMessage(
+        message,
+        `❌ Bạn chỉ có thể sử dụng lệnh này trong thread của kênh <#${config.allowedChannelId}>`
+      );
+    }
+
+    if (!args.length) {
+      return await discordUtils.sendErrorMessage(
+        message,
+        "❌ Vui lòng cung cấp nội dung trả lời. Ví dụ: `!reply <nội dung>`"
+      );
+    }
+
+    // Kiểm tra quyền của bot
     if (
       !discordUtils.hasBotPermissions(message.channel, [
         PermissionsBitField.Flags.SendMessages,
@@ -35,10 +47,12 @@ module.exports = {
     ) {
       return await discordUtils.sendErrorMessage(
         message,
-        "Bot không có đủ quyền (gửi tin nhắn, đọc lịch sử, nhúng link)."
+        "❌ Bot không có đủ quyền trong thread này!"
       );
     }
 
-    await handleReplyCommand(message, prompt, config.defaultLanguage);
+    const prompt = args.join(" ");
+    await message.channel.sendTyping(); // Hiển thị bot đang phản hồi
+    await handleReplyCommand(message, prompt, null);
   },
 };
