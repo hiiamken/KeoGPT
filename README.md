@@ -9,7 +9,7 @@
 <p align="center">
   A versatile Discord AI assistant, powered by both <strong>Google's Gemini</strong> and <strong>OpenAI's ChatGPT</strong>, designed to bring intelligence, engagement, and seamless database integration to your community.
   <br />
-  <a href="https://github.com/hiiamken/KeoGPT-DiscordBot/issues">🐞 Report Bugs / 💡 Request Features</a>
+  <a href="https://github.com/hiiamken/KeoGPT/issues">🐞 Report Bugs / 💡 Request Features</a>
 </p>
 
 ---
@@ -144,7 +144,7 @@ Thank you for choosing KeoGPT! 💖
 
 ## 🤝 Contributing
 
-Contributions are welcome!  Feel free to submit issues or pull requests on the [GitHub repository](https://github.com/hiiamken/KeoGPT-DiscordBot).
+Contributions are welcome!  Feel free to submit issues or pull requests on the [GitHub repository](https://github.com/hiiamken/KeoGPT).
 
 ---
 
@@ -155,10 +155,10 @@ This project is licensed under the [MIT License](LICENSE).
 ---
 
 <p align="center">
-  <a href="https://github.com/hiiamken/KeoGPT-DiscordBot/stargazers"><img src="https://img.shields.io/github/stars/hiiamken/KeoGPT-DiscordBot?style=social" alt="GitHub stars"></a>
-  <a href="https://github.com/hiiamken/KeoGPT-DiscordBot/fork"><img src="https://img.shields.io/github/forks/hiiamken/KeoGPT-DiscordBot?style=social" alt="GitHub forks"></a>
-  <a href="https://github.com/hiiamken/KeoGPT-DiscordBot/issues"><img src="https://img.shields.io/github/issues/hiiamken/KeoGPT-DiscordBot?color=important" alt="GitHub issues"></a>
- <a href="https://github.com/hiiamken/KeoGPT-DiscordBot/blob/main/LICENSE"><img src="https://img.shields.io/github/license/hiiamken/KeoGPT-DiscordBot" alt="License"></a>
+  <a href="https://github.com/hiiamken/KeoGPT/stargazers"><img src="https://img.shields.io/github/stars/hiiamken/KeoGPT?style=social" alt="GitHub stars"></a>
+  <a href="https://github.com/hiiamken/KeoGPT/fork"><img src="https://img.shields.io/github/forks/hiiamken/KeoGPT?style=social" alt="GitHub forks"></a>
+  <a href="https://github.com/hiiamken/KeoGPT/issues"><img src="https://img.shields.io/github/issues/hiiamken/KeoGPT?color=important" alt="GitHub issues"></a>
+ <a href="https://github.com/hiiamken/KeoGPT/blob/main/LICENSE"><img src="https://img.shields.io/github/license/hiiamken/KeoGPT" alt="License"></a>
 </p>
 
 <p align="center">
