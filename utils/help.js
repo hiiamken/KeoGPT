@@ -57,6 +57,9 @@ const afterReplySuggestions = Object.freeze([
 ]);
 
 function getRandomReplySuggestion(threadName) {
+  if (!threadName || !threadName.trim()) {
+    threadName = "chủ đề này";
+  }
   return getRandomElement(afterReplySuggestions).replace(
     "**THREADNAME**",
     threadName

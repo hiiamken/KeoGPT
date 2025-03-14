@@ -1,127 +1,128 @@
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const config = require("../config");
-const fs = require("node:fs");
-const path = require("node:path");
-const fetch = (...args) =>
-  import("node-fetch").then(({ default: fetch }) => fetch(...args));
-
-const GEMINI_TIMEOUT = 15000;
+const { formatMath } = require("./format");
 
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
-const geminiModel = genAI.getGenerativeModel({ model: config.geminiModel });
 
-async function generateContent(prompt) {
+async function imageUrlToBase64(imageUrl) {
   try {
+    const response = await fetch(imageUrl);
+    if (!response.ok) {
+      throw new Error(
+        `Failed to fetch image: ${response.status} ${response.statusText}`
+      );
+    }
+    const buffer = await response.arrayBuffer();
+    const base64 = Buffer.from(buffer).toString("base64");
+    return base64;
+  } catch (error) {
+    console.error("Error converting image to base64:", error);
+    throw error;
+  }
+}
+
+function createImagePart(base64Data, mimeType) {
+  return {
+    inlineData: {
+      mimeType,
+      data: base64Data,
+    },
+  };
+}
+
+async function generateContent(request) {
+  try {
+    // Nếu không cung cấp model thì dùng từ config
+    if (!request.model) {
+      request.model = config.geminiModel;
+    }
+    const model = genAI.getGenerativeModel({ model: request.model });
     const result = await Promise.race([
-      geminiModel.generateContent(prompt),
+      model.generateContent(request.contents),
       new Promise((_, reject) =>
         setTimeout(
           () => reject(new Error("Gemini API timeout")),
-          GEMINI_TIMEOUT
+          config.geminiTimeout || 15000
         )
       ),
     ]);
-    return (
-      result?.response?.text() || "⚠️ Lỗi: Không nhận được phản hồi từ Gemini."
-    );
+
+    const response = await result.response;
+    let text = response.text();
+    text = formatMath(text);
+    const usage = result.promptFeedback;
+    return { text, usage };
   } catch (error) {
-    console.error("❌ Gemini API error (generateContent):", error);
-    return error.message === "Gemini API timeout"
-      ? "⚠️ Xin lỗi, API Gemini mất quá nhiều thời gian để phản hồi. Vui lòng thử lại sau."
-      : "⚠️ Đã xảy ra lỗi khi kết nối với API Gemini.";
+    console.error("Error generating content with Gemini:", error);
+    throw error;
   }
 }
 
-async function generateTitle(prompt) {
-  const titlePrompt = `Tạo một tiêu đề RẤT NGẮN GỌN (1-5 chữ, tối đa 25 kí tự) cho câu hỏi sau: "${prompt}". CHỈ TRẢ VỀ TIÊU ĐỀ, không giải thích, không giới thiệu, không thêm bất kỳ ký tự nào khác.\nTiêu đề:`;
-  return generateContent([titlePrompt]);
-}
-
-async function generateContentWithHistory(messages) {
+async function generateContentWithHistory(request) {
   try {
-    if (
-      !messages ||
-      messages.length === 0 ||
-      !messages[messages.length - 1]?.parts?.[0]?.text
-    ) {
+    if (!request.history || request.history.length === 0) {
       throw new Error("⚠️ Lỗi: Dữ liệu lịch sử không hợp lệ.");
     }
-
-    const chat = await geminiModel.startChat({
-      history: messages,
-      generationConfig: { maxOutputTokens: 4096 },
+    if (!request.model) {
+      request.model = config.geminiModel;
+    }
+    const model = genAI.getGenerativeModel({ model: request.model });
+    const chat = model.startChat({
+      history: request.history,
+      generationConfig: {
+        maxOutputTokens: config.geminiMaxTokens,
+        temperature: config.geminiTemperature,
+      },
     });
 
-    const result = await chat.sendMessage(
-      messages[messages.length - 1].parts[0].text
-    );
-    return (
-      result?.response?.text() || "⚠️ Lỗi: Không nhận được phản hồi từ Gemini."
-    );
+    const result = await Promise.race([
+      chat.sendMessage(request.prompt),
+      new Promise((_, reject) =>
+        setTimeout(
+          () => reject(new Error("Gemini API timeout")),
+          config.geminiTimeout || 15000
+        )
+      ),
+    ]);
+
+    const response = await result.response;
+    let text = response.text();
+    text = formatMath(text);
+    const usage = result.promptFeedback;
+    return { text, usage };
   } catch (error) {
-    console.error("❌ Gemini API error (generateContentWithHistory):", error);
-    return "⚠️ Đã xảy ra lỗi khi xử lý dữ liệu.";
+    console.error("Error generating content with history using Gemini:", error);
+    throw error;
   }
 }
 
-const languageInstructions = Object.freeze({
-  vi: "Hãy trả lời bằng tiếng Việt. Trình bày lời giải chi tiết, rõ ràng, từng bước. Sử dụng Markdown để định dạng (in đậm, gạch đầu dòng, v.v.). Viết các công thức toán học một cách dễ đọc (ví dụ: f'(x), e^x, x > 0, (0, +∞)).",
-  en: "Please respond in English. Format the response using Markdown.",
-  ja: "日本語で応答してください。 マークダウンを使用して応答をフォーマットします。",
-  ko: "한국어로 응답하십시오. 마크다운을 사용하여 응답 형식을 지정합니다.",
-  fr: "Répondez en français. Formatez la réponse en utilisant Markdown.",
-  es: "Responde en español. Formatea la respuesta usando Markdown.",
-  de: "Antworten Sie auf Deutsch. Formatieren Sie die Antwort mit Markdown.",
-  ru: "Отвечайте на русском языке. Отформатируйте ответ, используя Markdown.",
-  zh: "请用中文回答。使用 Markdown 格式化响应。",
-  "zh-TW": "請用繁體中文回答。使用 Markdown 格式化回應。",
-  ar: "الرجاء الرد باللغة العربية. قم بتنسيق الاستجابة باستخدام Markdown.",
-});
-
-function getLanguageInstruction(language) {
-  return (
-    languageInstructions[language] ||
-    `Please respond in ${language}. Format the response using Markdown.`
-  );
-}
-
-function fileToGenerativePart(filePath, mimeType) {
-  try {
-    return {
-      inlineData: {
-        data: Buffer.from(fs.readFileSync(filePath)).toString("base64"),
-        mimeType,
-      },
-    };
-  } catch (error) {
-    console.error("❌ Error reading file for Gemini API:", error);
-    return null;
+async function generateTitle(request) {
+  const prompt = request.prompt;
+  if (!prompt || !prompt.trim()) {
+    return "Câu hỏi chưa có tiêu đề";
   }
-}
-
-async function downloadImage(url, filename) {
+  const titlePrompt = `Tạo một tiêu đề ngắn (3-6 từ, tối đa 50 ký tự) tóm tắt câu hỏi sau: "${prompt}".
+Chỉ trả về tiêu đề, không giải thích, không thêm ký tự nào khác.`;
   try {
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(
-        `⚠️ Failed to download image: ${response.status} ${response.statusText}`
-      );
+    if (!request.model) {
+      request.model = config.geminiModel;
     }
-
-    const buffer = await response.arrayBuffer();
-    fs.writeFileSync(filename, Buffer.from(buffer));
-    console.log(`✅ Image downloaded successfully: ${filename}`);
+    const model = genAI.getGenerativeModel({ model: request.model });
+    const result = await model.generateContent(titlePrompt);
+    const response = await result.response;
+    let text = response.text();
+    text = formatMath(text);
+    return text;
   } catch (error) {
-    console.error("❌ Error downloading image:", error);
+    console.error("Error generating title Gemini:", error);
     throw error;
   }
 }
 
 module.exports = {
   generateContent,
-  generateTitle,
+  imageUrlToBase64,
   generateContentWithHistory,
-  getLanguageInstruction,
-  fileToGenerativePart,
-  downloadImage,
+  generateTitle,
+  createImagePart,
 };

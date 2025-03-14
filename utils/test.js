@@ -16,9 +16,6 @@ const fs = require("fs");
 const TEST_DB_FILE = "test_database.sqlite";
 const MAIN_DB_FILE = "database.sqlite";
 
-const SHOULD_DELETE_THREADS = false; // Đặt true nếu muốn xóa thread hết hạn
-const SHOULD_RESET_POINTS = false; // Đặt true nếu muốn reset điểm
-
 const COLORS = {
   reset: "\x1b[0m",
   green: "\x1b[32m",
@@ -41,15 +38,6 @@ function colorize(text, color) {
 async function runTests() {
   console.log(colorize("\n🚀 KeoGPT Test Suite Started 🚀", "blue"));
 
-  if (fs.existsSync(MAIN_DB_FILE)) {
-    fs.copyFileSync(MAIN_DB_FILE, `${MAIN_DB_FILE}.backup`);
-  }
-
-  if (fs.existsSync(TEST_DB_FILE)) {
-    fs.unlinkSync(TEST_DB_FILE);
-  }
-  fs.copyFileSync(MAIN_DB_FILE, TEST_DB_FILE);
-
   process.env.DATABASE_FILE = TEST_DB_FILE;
   const db = getDatabaseInstance();
 
@@ -70,13 +58,9 @@ async function runTests() {
         func: () => insertOrUpdateUser(testUserId, testUserName),
         name: "insertOrUpdateUser",
       },
-      SHOULD_DELETE_THREADS
-        ? { func: deleteExpiredThreads, name: "deleteExpiredThreads" }
-        : null,
-      SHOULD_RESET_POINTS
-        ? { func: () => resetAllPoints(true), name: "resetAllPoints" }
-        : null,
-    ].filter(Boolean);
+      { func: deleteExpiredThreads, name: "deleteExpiredThreads" },
+      { func: () => resetAllPoints(true), name: "resetAllPoints" },
+    ];
 
     for (const test of dbTests) {
       try {
@@ -188,11 +172,6 @@ async function runTests() {
       console.log("📂 Restoring database from backup...");
       fs.copyFileSync(`${MAIN_DB_FILE}.backup`, MAIN_DB_FILE);
       fs.unlinkSync(`${MAIN_DB_FILE}.backup`);
-    }
-
-    if (fs.existsSync(TEST_DB_FILE)) {
-      console.log("🗑️  Removing test database...");
-      fs.unlinkSync(TEST_DB_FILE);
     }
 
     console.log(colorize("✅ Tests completed successfully.", "yellow"));

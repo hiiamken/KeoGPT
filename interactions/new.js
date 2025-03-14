@@ -7,13 +7,16 @@ const {
   ButtonStyle,
 } = require("discord.js");
 const {
-  getLanguageInstruction,
-  generateTitle,
-  fileToGenerativePart,
-  downloadImage,
-  generateContentWithHistory,
+  generateContent: generateContentGemini,
+  imageUrlToBase64,
+  generateContentWithHistory: generateContentWithHistoryGemini,
 } = require("../utils/gemini");
-const { formatMath } = require("../utils/format");
+const {
+  generateContent: generateContentChatGPT,
+  generateTitle,
+  generateContentWithHistory: generateContentWithHistoryChatGPT,
+} = require("../utils/chatgpt");
+const db = require("../utils/database");
 const config = require("../config");
 const discordUtils = require("../utils/discord");
 const fs = require("fs");
@@ -22,117 +25,45 @@ const {
   getRandomReplySuggestion,
   getRandomLoadingMessage,
 } = require("../utils/help");
-const {
-  executeQuery,
-  beginTransaction,
-  commitTransaction,
-  rollbackTransaction,
-  releaseConnection,
-  saveThreadInfo,
-  saveMessage,
-} = require("../utils/database");
-
-async function processImageAttachment(message) {
-  const tempDir = path.join(__dirname, "..", "temp");
-  if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
-
-  const imagePath = path.join(tempDir, "temp_image.png");
-
-  try {
-    let attachment = discordUtils.isSlashCommand(message)
-      ? message.options.getAttachment("image")
-      : message.attachments?.first() || null;
-
-    if (attachment && attachment.contentType?.startsWith("image/")) {
-      const allowedTypes = [
-        "image/jpeg",
-        "image/png",
-        "image/webp",
-        "image/gif",
-        "image/heic",
-      ];
-      if (!allowedTypes.includes(attachment.contentType)) {
-        await discordUtils.sendErrorMessage(
-          message,
-          `❌ Loại tệp không được hỗ trợ.`,
-          discordUtils.isSlashCommand(message)
-        );
-        return undefined;
-      }
-
-      await downloadImage(attachment.url, imagePath);
-      return fileToGenerativePart(imagePath, "image/png");
-    }
-    return null;
-  } catch (error) {
-    console.error("❌ Lỗi khi xử lý ảnh:", error);
-    await discordUtils.sendErrorMessage(message, "❌ Có lỗi khi xử lý ảnh.");
-    return undefined;
-  } finally {
-    if (fs.existsSync(imagePath)) fs.unlinkSync(imagePath);
-  }
-}
-
-async function createOrResetThread(message, prompt, userId) {
-  let thread;
-  const isSlashCommand = discordUtils.isSlashCommand(message);
-
-  try {
-    if (message.channel.isThread()) {
-      thread = message.channel;
-      const threadOwnerId = thread.ownerId || userId;
-
-      if (userId === threadOwnerId || userId === config.adminUserId) {
-        const newThreadTitle = await generateTitle(prompt);
-        await discordUtils.safeRenameThread(
-          thread,
-          `💬 ${newThreadTitle.substring(0, 90)}`
-        );
-        await executeQuery("DELETE FROM messages WHERE threadId = ?", [
-          thread.id,
-        ]);
-      } else {
-        return await discordUtils.sendErrorMessage(
-          message,
-          "❌ Bạn không có quyền làm mới thread này!",
-          isSlashCommand
-        );
-      }
-    } else {
-      return await discordUtils.sendErrorMessage(
-        message,
-        "❌ Lệnh này chỉ dùng trong thread.",
-        isSlashCommand
-      );
-    }
-
-    return thread;
-  } catch (error) {
-    console.error("❌ Lỗi khi tạo/làm mới thread:", error);
-    throw error;
-  }
-}
 
 async function sendMessageAndSave(
-  thread,
+  channel,
   content,
   userId,
   isPrompt = false,
-  aiResponse = null
+  aiResponse = null,
+  points = 0
 ) {
-  try {
-    const msg = await thread.send(content);
-    await saveMessage(
-      thread.id,
+  const MAX_LENGTH = 2000;
+  if (content.length <= MAX_LENGTH) {
+    const msg = await channel.send(content);
+    await db.saveMessage(
+      channel.id,
       userId,
       typeof content === "string" ? content : "Embed Message",
       isPrompt,
-      aiResponse
+      aiResponse,
+      points
     );
     return msg;
-  } catch (error) {
-    console.error("❌ Lỗi khi gửi hoặc lưu tin nhắn:", error);
-    throw error;
+  } else {
+    const parts = discordUtils.chunkString(content, MAX_LENGTH);
+    let firstMessage = null;
+    for (const part of parts) {
+      const msg = await channel.send(part);
+      if (!firstMessage) {
+        firstMessage = msg;
+      }
+      await db.saveMessage(
+        channel.id,
+        userId,
+        part,
+        isPrompt,
+        aiResponse,
+        points
+      );
+    }
+    return firstMessage;
   }
 }
 
@@ -143,26 +74,26 @@ async function handleNewCommand(
   client,
   imageAttachment = null
 ) {
-  let trx;
-  let imagePart = null;
-  const isSlashCommand = discordUtils.isSlashCommand(message);
-  const userId = isSlashCommand ? message.user.id : message.author.id;
+  const isSlash = discordUtils.isSlashCommand(message);
+  const userId = isSlash ? message.user.id : message.author.id;
+  const username = isSlash ? message.user.username : message.author.username;
+  language = language || config.defaultLanguage;
 
   try {
-    trx = await beginTransaction();
+    if (isSlash && !message.deferred && !message.replied) {
+      await message.deferReply({ ephemeral: false });
+    }
 
     if (
       !discordUtils.hasBotPermissions(message.channel, [
         PermissionsBitField.Flags.SendMessages,
-        PermissionsBitField.Flags.EmbedLinks,
-        PermissionsBitField.Flags.AttachFiles,
         PermissionsBitField.Flags.ReadMessageHistory,
       ])
     ) {
       return await discordUtils.sendErrorMessage(
         message,
         "❌ Bot không có đủ quyền!",
-        isSlashCommand
+        isSlash
       );
     }
 
@@ -170,122 +101,275 @@ async function handleNewCommand(
       return await discordUtils.sendErrorMessage(
         message,
         "❌ Bạn chỉ có thể sử dụng lệnh này trong một thread.",
-        isSlashCommand
+        isSlash
       );
     }
 
-    const thread = await createOrResetThread(message, prompt, userId);
-    if (!thread) return;
+    await db.ensureUserExists(userId, username);
 
-    imagePart = await processImageAttachment(message);
-    if (imagePart === undefined) return;
+    const thread = message.channel;
+    const threadOwnerId = thread.ownerId || userId;
 
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId("simple")
-        .setLabel("Đơn giản")
-        .setStyle(ButtonStyle.Primary),
-      new ButtonBuilder()
-        .setCustomId("detailed")
-        .setLabel("Chuyên nghiệp")
-        .setStyle(ButtonStyle.Success)
+    if (userId !== threadOwnerId && userId !== config.adminUserId) {
+      return await discordUtils.sendErrorMessage(
+        message,
+        "❌ Bạn không có quyền làm mới thread này!",
+        isSlash
+      );
+    }
+
+    const newThreadTitle = await generateTitle(prompt);
+    await discordUtils.safeRenameThread(
+      thread,
+      `💬 ${newThreadTitle.substring(0, 90)}`
     );
+    await db.executeQuery("DELETE FROM messages WHERE threadId = ?", [
+      thread.id,
+    ]);
+    await db.executeQuery("DELETE FROM threads WHERE threadId = ?", [
+      thread.id,
+    ]);
 
-    const replyMessage = await thread.send({
-      content: `📢 <@${userId}>, bạn muốn nhận câu trả lời theo kiểu nào?\n\n**🔹 Đơn giản:** Giải thích ngắn gọn, dễ hiểu.\n**🔹 Chuyên nghiệp:** Giải thích chi tiết, đầy đủ, có thể kèm theo công thức hoặc ví dụ.`,
+    if (!prompt || !prompt.trim()) {
+      if (!imageAttachment) {
+        return await discordUtils.sendErrorMessage(
+          message,
+          "❌ Bạn cần cung cấp nội dung để làm mới thread!",
+          isSlash
+        );
+      }
+      prompt = "Hãy mô tả hình ảnh";
+    } else {
+      prompt = prompt.trim();
+    }
+
+    let loadingMessage;
+    if (isSlash) {
+      loadingMessage = await message.followUp({
+        content: getRandomLoadingMessage(),
+        ephemeral: false,
+      });
+    } else {
+      loadingMessage = await message.reply(getRandomLoadingMessage());
+    }
+
+    const row = discordUtils.createResponseStyleButtons();
+    const styleMessage = await thread.send({
+      content: `<@${userId}>, bạn muốn nhận câu trả lời theo kiểu nào?\n\n**Đơn giản:** Giải thích ngắn gọn\n**Chuyên nghiệp:** Giải thích chi tiết, đầy đủ.`,
       components: [row],
     });
 
+    let chosenPrompt = "";
     try {
-      const interaction = await replyMessage.awaitMessageComponent({
+      const interaction = await styleMessage.awaitMessageComponent({
+        filter: (i) => i.user.id === userId,
         time: 60000,
       });
       const responseStyle = interaction.customId;
       await interaction.deferUpdate();
-      await discordUtils.safeDeleteMessage(replyMessage);
+      await discordUtils.safeDeleteMessage(styleMessage);
 
-      const languageInstruction = getLanguageInstruction(language);
-      let currentPrompt =
-        responseStyle === "simple"
-          ? `${languageInstruction}\nTrả lời ngắn gọn.`
-          : `${languageInstruction}\nTrả lời chi tiết, đầy đủ.`;
-
-      const messages = [{ role: "user", parts: [{ text: prompt }] }];
-      if (imagePart) messages[0].parts.unshift(imagePart);
-
-      const loadingMessage = await thread.send(getRandomLoadingMessage());
-
-      const geminiResponse = await generateContentWithHistory(messages);
-      let text = formatMath(geminiResponse);
-
-      await sendMessageAndSave(
-        thread,
-        text,
-        message.client.user.id,
-        false,
-        geminiResponse
-      );
-      await sendMessageAndSave(thread, prompt, userId, true, null);
-
-      await thread.send(getRandomReplySuggestion(thread.name));
-      await discordUtils.safeDeleteMessage(loadingMessage);
-    } catch {
-      await discordUtils.safeDeleteMessage(replyMessage);
+      if (responseStyle === "simple") {
+        chosenPrompt = "Trả lời đơn giản, 3-4 đoạn, 150 từ.";
+      } else if (responseStyle === "detailed") {
+        chosenPrompt = "Trả lời chi tiết, tối thiểu 300 từ, có ví dụ.";
+      }
+    } catch (err) {
+      await discordUtils.safeDeleteMessage(styleMessage);
+      chosenPrompt = "Trả lời chi tiết, đầy đủ thông tin.";
     }
 
-    await commitTransaction(trx);
+    let imageUrl = null;
+    let mimeType = null;
+    if (discordUtils.isSlashCommand(message)) {
+      const attachment = message.options.getAttachment("image");
+      if (attachment) {
+        imageUrl = attachment.url;
+        mimeType = attachment.contentType;
+      }
+    } else {
+      const attachment = message.attachments?.first();
+      if (attachment) {
+        imageUrl = attachment.url;
+        mimeType = attachment.contentType;
+      }
+    }
+
+    const languageInstruction = config.languageInstruction;
+    const markdownInstruction = `
+Định dạng câu trả lời của bạn bằng Markdown, tuân thủ NGHIÊM NGẶT các quy tắc sau đây. Đây là YÊU CẦU BẮT BUỘC, không được phép sai lệch:
+1. **Code Python:**
+   - Luôn đặt code Python trong code block (bắt đầu với \`\`\`python và kết thúc với \`\`\`).
+2. **Tiêu đề và phần:**
+   - Sử dụng dấu sao đôi (**) để IN ĐẬM tiêu đề chính.
+3. **Giải thích chi tiết:**
+   - Sử dụng gạch đầu dòng (-) cho mỗi ý giải thích.
+4. **Công thức toán học:**
+   - Hiển thị công thức bằng ký tự Unicode.
+5. **Ví dụ (nếu có):**
+   - Trình bày ví dụ rõ ràng.
+6. **Không:**
+   - Không sử dụng LaTeX thô.
+7. **Văn phong:**
+   - Sử dụng ngôn ngữ chính xác và dễ hiểu.
+`;
+
+    const finalPrompt = imageUrl
+      ? `${languageInstruction}\n${markdownInstruction}\n\n${prompt}\n\n[Hình ảnh đính kèm]\n\n${chosenPrompt}`
+      : `${languageInstruction}\n${markdownInstruction}\n\n${prompt}\n\n${chosenPrompt}`;
+
+    await db.saveThreadInfo(
+      thread.id,
+      userId,
+      prompt,
+      language,
+      new Date(Date.now() + config.threadLifetimeDays * 24 * 60 * 60 * 1000)
+    );
+
+    let responseText;
+    const dailyTokenUsage = await db.getDailyTokenUsage(userId);
+    const estimatedPromptTokens = Math.round(finalPrompt.length / 4);
+    const MAX_DAILY_TOKENS = 510000;
+    let useGemini = true;
+    if (dailyTokenUsage + estimatedPromptTokens > MAX_DAILY_TOKENS) {
+      useGemini = false;
+    }
+
+    try {
+      if (useGemini) {
+        const geminiPayload = {
+          model: config.geminiModel,
+          contents: [{ text: finalPrompt }],
+        };
+        if (imageUrl) {
+          const base64Image = await imageUrlToBase64(imageUrl);
+          geminiPayload.contents.push({
+            inlineData: {
+              mimeType: mimeType,
+              data: base64Image,
+            },
+          });
+        }
+        const geminiResponse = await generateContentGemini(geminiPayload);
+        responseText = geminiResponse.text;
+
+        const tokensUsed =
+          (geminiResponse.usage?.promptTokenCount || 0) +
+          (geminiResponse.usage?.completionTokenCount || 0);
+        await db.updateDailyTokenUsage(userId, tokensUsed);
+      } else {
+        const messages = [
+          {
+            role: "system",
+            content: languageInstruction + "\n" + markdownInstruction,
+          },
+          {
+            role: "user",
+            content: `${prompt}\n\n${chosenPrompt}`,
+          },
+        ];
+        if (imageUrl) {
+          const base64Image = await imageUrlToBase64(imageUrl);
+          messages[1].content = [
+            { type: "text", text: messages[1].content },
+            {
+              type: "image_url",
+              image_url: {
+                url: `data:${mimeType};base64,${base64Image}`,
+              },
+            },
+          ];
+        }
+        const chatGPTResponse = await generateContentWithHistoryChatGPT(
+          messages
+        );
+        responseText = chatGPTResponse;
+      }
+    } catch (err) {
+      console.error("❌ Lỗi gọi API Gemini/ChatGPT:", err);
+      await discordUtils.sendErrorMessage(
+        message,
+        "❌ Có lỗi khi xử lý. Vui lòng thử lại sau.",
+        isSlash
+      );
+      await discordUtils.safeDeleteMessage(loadingMessage);
+      return;
+    }
+
+    await sendMessageAndSave(
+      thread,
+      responseText,
+      client.user.id,
+      false,
+      responseText,
+      0
+    );
+    await sendMessageAndSave(
+      thread,
+      prompt,
+      userId,
+      true,
+      null,
+      config.newThreadPoints
+    );
+
+    await db.executeQuery(
+      "UPDATE users SET total_points = total_points + ? WHERE userId = ?",
+      [config.newThreadPoints, userId]
+    );
+
+    await message.channel.send(getRandomReplySuggestion());
+    if (isSlash) {
+      await message.followUp({
+        content: `Thread: ${message.channel.url}`,
+        ephemeral: true,
+      });
+    }
+    await discordUtils.safeDeleteMessage(loadingMessage);
   } catch (error) {
-    if (trx) await rollbackTransaction(trx);
-    console.error("❌ Lỗi trong handleNewCommand:", error);
+    console.error("❌ Error in handleNewCommand:", error);
     await discordUtils.sendErrorMessage(
       message,
-      "❌ Có lỗi khi xử lý.",
-      isSlashCommand
+      "❌ Đã xảy ra lỗi khi xử lý yêu cầu của bạn.",
+      isSlash
     );
-  } finally {
-    if (config.databaseType === "mysql" && trx) releaseConnection(trx);
   }
 }
 
-module.exports = {
-  data: new SlashCommandBuilder()
-    .setName("new")
-    .setDescription("Tạo một thread mới để thảo luận.")
-    .addStringOption((option) =>
-      option
-        .setName("prompt")
-        .setDescription("Câu hỏi của bạn")
-        .setRequired(true)
-    )
-    .addAttachmentOption((option) =>
-      option
-        .setName("image")
-        .setDescription("Ảnh (không bắt buộc)")
-        .setRequired(false)
-    )
-    .setDMPermission(false),
+const cmdData = new SlashCommandBuilder()
+  .setName("new")
+  .setDescription("Làm mới thread hiện tại")
+  .addStringOption((option) =>
+    option
+      .setName("prompt")
+      .setDescription("Nội dung prompt mới (không bắt buộc)")
+      .setRequired(false)
+  )
+  .addAttachmentOption((option) =>
+    option
+      .setName("image")
+      .setDescription("Ảnh (không bắt buộc)")
+      .setRequired(false)
+  )
+  .setDMPermission(false);
 
+module.exports = {
+  data: cmdData,
   async execute(interaction) {
-    await interaction.deferReply();
-    const prompt = interaction.options.getString("prompt");
+    const prompt = interaction.options.getString("prompt") || "";
+    const language =
+      interaction.options.getString("language") || config.defaultLanguage;
     const image = interaction.options.getAttachment("image");
     await handleNewCommand(
       interaction,
       prompt,
-      config.defaultLanguage,
+      language,
       interaction.client,
       image
     );
   },
-
   async executePrefix(message, args) {
-    const prompt = args.join(" ");
-    if (!prompt) {
-      return await discordUtils.sendErrorMessage(
-        message,
-        "❌ Bạn cần nhập câu hỏi!"
-      );
-    }
+    const prompt = args.join(" ") || "";
     await handleNewCommand(
       message,
       prompt,
@@ -293,6 +377,5 @@ module.exports = {
       message.client
     );
   },
-
   handleNewCommand,
 };

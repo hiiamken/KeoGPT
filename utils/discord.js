@@ -59,11 +59,25 @@ async function sendErrorMessage(message, content, ephemeral = false) {
 }
 
 async function safeDeleteMessage(message) {
-  if (!message || !message.delete) return;
+  if (!message || !message.deletable) return;
+
+  const botMember = message.guild?.members.me;
+  if (
+    !botMember ||
+    !message.channel
+      .permissionsFor(botMember)
+      .has(PermissionsBitField.Flags.ManageMessages)
+  ) {
+    console.warn("⚠️ Bot không có quyền xóa tin nhắn.");
+    return;
+  }
+
   try {
     await message.delete();
   } catch (error) {
-    console.warn(`⚠️ Failed to delete message: ${error.message}`);
+    if (error.code !== 10008) {
+      console.warn(`⚠️ Failed to delete message: ${error.message}`);
+    }
   }
 }
 
@@ -256,6 +270,14 @@ function createMockPrefixMessage(
   };
 }
 
+function chunkString(str, maxLength) {
+  const parts = [];
+  for (let i = 0; i < str.length; i += maxLength) {
+    parts.push(str.substring(i, i + maxLength));
+  }
+  return parts;
+}
+
 function createCodeEmbed(code, language = "python", title = "Code") {
   return new EmbedBuilder()
     .setColor("#0099ff")
@@ -273,4 +295,5 @@ module.exports = {
   createMockPrefixMessage,
   createMockSlashInteraction,
   createCodeEmbed,
+  chunkString,
 };

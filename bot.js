@@ -83,12 +83,13 @@ function setRandomActivity() {
 
 client.once(Events.ClientReady, async (c) => {
   console.log(`✅ Bot is ready! Logged in as ${c.user.tag}`);
-  await db.initializeDatabase();
 
   if (process.env.NODE_ENV !== "production") {
     console.log("🛠 Running tests...");
     await runTests();
   }
+
+  await db.initializeDatabase();
 
   const guild = client.guilds.cache.get(config.guildId);
   if (guild) await guild.members.fetch();
@@ -227,7 +228,13 @@ cron.schedule("0 3 * * *", async () => {
 });
 
 cron.schedule("0 0 1 * *", async () => {
-  await resetPoints();
+  await resetMonthlyPoints();
+});
+
+cron.schedule("0 0 * * *", async () => {
+  console.log("Resetting daily token usage...");
+  await db.resetDailyTokenUsage();
+  console.log("Daily token usage reset.");
 });
 
 async function deleteExpiredThreads() {

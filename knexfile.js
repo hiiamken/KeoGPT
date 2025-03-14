@@ -3,20 +3,29 @@ const path = require("path");
 
 module.exports = {
   development: {
-    client: "better-sqlite3",
+    client: "sqlite3",
     connection: {
-      filename: path.join(__dirname, "./database.sqlite"),
+      filename: path.join(__dirname, "database.sqlite"),
     },
     migrations: {
-      directory: path.join(__dirname, "./migrations"),
+      directory: path.join(__dirname, "migrations"),
     },
     seeds: {
-      directory: path.join(__dirname, "./seeds"),
+      directory: path.join(__dirname, "seeds"),
     },
     useNullAsDefault: true,
     pool: {
       min: 2,
-      max: 50,
+      max: 10,
+      afterCreate: (conn, cb) => {
+        conn.pragma("foreign_keys = ON", (err) => {
+          if (err) return cb(err);
+          conn.pragma("journal_mode = WAL", (err) => {
+            if (err) return cb(err);
+            conn.pragma("busy_timeout = 5000", cb);
+          });
+        });
+      },
     },
   },
 
@@ -31,14 +40,14 @@ module.exports = {
       port: process.env.DB_PORT || 3306,
     },
     migrations: {
-      directory: path.join(__dirname, "./migrations"),
+      directory: path.join(__dirname, "migrations"),
     },
     seeds: {
-      directory: path.join(__dirname, "./seeds"),
+      directory: path.join(__dirname, "seeds"),
     },
     pool: {
       min: 2,
-      max: 100,
+      max: 50,
     },
   },
 
@@ -53,10 +62,10 @@ module.exports = {
       port: process.env.STAGING_DB_PORT || 3306,
     },
     migrations: {
-      directory: path.join(__dirname, "./migrations"),
+      directory: path.join(__dirname, "migrations"),
     },
     seeds: {
-      directory: path.join(__dirname, "./seeds"),
+      directory: path.join(__dirname, "seeds"),
     },
     pool: {
       min: 2,
@@ -65,16 +74,29 @@ module.exports = {
   },
 
   test: {
-    client: "better-sqlite3",
+    client: "sqlite3",
     connection: {
-      filename: path.join(__dirname, "./test.sqlite"),
+      filename: path.join(__dirname, "test.sqlite"),
     },
     migrations: {
-      directory: path.join(__dirname, "./migrations"),
+      directory: path.join(__dirname, "migrations"),
     },
     seeds: {
-      directory: path.join(__dirname, "./seeds"),
+      directory: path.join(__dirname, "seeds"),
     },
     useNullAsDefault: true,
+    pool: {
+      min: 2,
+      max: 10,
+      afterCreate: (conn, cb) => {
+        conn.pragma("foreign_keys = ON", (err) => {
+          if (err) return cb(err);
+          conn.pragma("journal_mode = WAL", (err) => {
+            if (err) return cb(err);
+            conn.pragma("busy_timeout = 5000", cb);
+          });
+        });
+      },
+    },
   },
 };

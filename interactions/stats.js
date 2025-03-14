@@ -14,40 +14,30 @@ async function handleStatsCommand(interaction) {
       "SELECT * FROM users WHERE userId = ? LIMIT 1",
       [userId]
     );
-
     let userData = userRows && userRows.length > 0 ? userRows[0] : null;
 
     if (!userData) {
       console.warn(`⚠️ Không có dữ liệu cho ${username}, tạo bản ghi mới.`);
       await executeQuery(
-        "INSERT INTO users (userId, username, total_threads, total_points) VALUES (?, ?, 0, 0)",
+        "INSERT INTO users (userId, username, total_points, monthly_points) VALUES (?, ?, 0, 0)",
         [userId, username]
       );
-      userData = { total_threads: 0, total_points: 0, last_reset: null };
+      userData = { total_points: 0, monthly_points: 0 };
     }
 
-    const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-
-    const monthlyPointsRows = await executeQuery(
-      `SELECT COALESCE(SUM(t.points), 0) AS monthly_points
-             FROM threads t
-             WHERE t.userId = ? AND t.createdAt >= ?`,
-      [userId, startOfMonth]
+    const threadCountRows = await executeQuery(
+      "SELECT COUNT(*) AS total_threads FROM threads WHERE userId = ?",
+      [userId]
     );
+    const totalThreads = threadCountRows[0].total_threads || 0;
 
-    const monthlyPoints = monthlyPointsRows?.[0]?.monthly_points || 0;
+    const monthlyPoints = userData.monthly_points || 0;
 
     const rankingRows = await executeQuery(
-      `SELECT u.userId, COALESCE(SUM(t.points), 0) AS monthly_points
-             FROM users u
-             LEFT JOIN threads t ON u.userId = t.userId
-             WHERE t.createdAt >= ?
-             GROUP BY u.userId
-             ORDER BY monthly_points DESC`,
-      [startOfMonth]
+      `SELECT userId, username, monthly_points
+       FROM users
+       ORDER BY monthly_points DESC`
     );
-
     let rank = "Chưa có hạng";
     if (rankingRows.length > 0) {
       const userRank =
@@ -64,11 +54,11 @@ async function handleStatsCommand(interaction) {
       .addFields(
         {
           name: "📌 Tổng quan",
-          value: `**Threads đã tạo:** ${userData.total_threads}\n**Tổng điểm:** ${userData.total_points}`,
+          value: `**Threads đã tạo:** ${totalThreads}\n**Tổng điểm toàn thời gian:** ${userData.total_points}`,
         },
         {
           name: "🏆 Điểm trong tháng",
-          value: `**Điểm:** ${monthlyPoints}\n**Thứ hạng:** ${rank}`,
+          value: `**Điểm tháng này:** ${monthlyPoints}\n**Thứ hạng:** ${rank}`,
         }
       )
       .setTimestamp()
@@ -79,7 +69,7 @@ async function handleStatsCommand(interaction) {
 
     return { embeds: [embed], ephemeral: true };
   } catch (error) {
-    console.error("❌ Lỗi khi lấy dữ liệu stats:", error);
+    console.error("❌ Lỗi khi lấy dữ liệu thống kê:", error);
     return {
       content: "❌ Có lỗi xảy ra khi lấy thông tin thống kê.",
       ephemeral: true,
@@ -100,10 +90,7 @@ module.exports = {
   },
 
   async executePrefix(message) {
-    if (message.channel.type === ChannelType.DM) {
-      return;
-    }
-
+    if (message.channel.type === ChannelType.DM) return;
     const mockInteraction = {
       user: message.author,
       guild: message.guild,
@@ -111,7 +98,6 @@ module.exports = {
       followUp: async (options) => await message.channel.send(options),
       client: message.client,
     };
-
     try {
       const result = await handleStatsCommand(mockInteraction);
       if (result) await message.channel.send(result);
