@@ -13,7 +13,6 @@ const path = require("node:path");
 const config = require("./config");
 const db = require("./utils/database");
 const cron = require("node-cron");
-const { runTests } = require("./utils/test");
 const { hasBotPermissions, sendErrorMessage } = require("./utils/discord");
 
 if (!process.env.DISCORD_TOKEN) {
@@ -45,6 +44,7 @@ const client = new Client({
 client.commands = new Collection();
 const interactionsPath = path.join(__dirname, "interactions");
 
+// Load commands from the interactions folder
 if (fs.existsSync(interactionsPath)) {
   const commandFiles = fs
     .readdirSync(interactionsPath)
@@ -53,16 +53,17 @@ if (fs.existsSync(interactionsPath)) {
   for (const file of commandFiles) {
     const filePath = path.join(interactionsPath, file);
     const command = require(filePath);
+    // Set a new item in the Collection with the key as the command name and the value as the exported module
     if ("data" in command && "execute" in command) {
       client.commands.set(command.data.name, command);
+      console.log(`Loaded command ${command.data.name} from ${filePath}`); // Log loaded commands
     } else {
-      console.warn(`⚠️ Missing "data" or "execute" in ${filePath}`);
+      console.warn(`⚠️ The command at ${filePath} is missing a required "data" or "execute" property.`);
     }
   }
 } else {
   console.warn("⚠️ 'interactions/' folder not found!");
 }
-
 const helpCooldowns = new Collection();
 
 const activities = [
@@ -84,11 +85,6 @@ function setRandomActivity() {
 client.once(Events.ClientReady, async (c) => {
   console.log(`✅ Bot is ready! Logged in as ${c.user.tag}`);
 
-  if (process.env.NODE_ENV !== "production") {
-    console.log("🛠 Running tests...");
-    await runTests();
-  }
-
   await db.initializeDatabase();
 
   const guild = client.guilds.cache.get(config.guildId);
@@ -100,49 +96,34 @@ client.once(Events.ClientReady, async (c) => {
 
 client.on(Events.InteractionCreate, async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
+
   const command = client.commands.get(interaction.commandName);
+
   if (!command) {
-    console.error(`❌ Command not found: ${interaction.commandName}`);
+    console.error(`❌ No command matching ${interaction.commandName} was found.`);
     return;
   }
 
-  if (
-    (!interaction.channel.isThread() &&
-      interaction.channelId !== config.allowedChannelId) ||
-    (interaction.channel.isThread() &&
-      interaction.channel.parentId !== config.allowedChannelId)
-  ) {
-    return await sendErrorMessage(
-      interaction,
-      `Use this command in <#${config.allowedChannelId}> or its threads!`
-    );
-  }
-
-  if (
-    !(await hasBotPermissions(interaction.channel, [
-      "SendMessages",
-      "ReadMessageHistory",
-      "ViewChannel",
-      "CreatePublicThreads",
-    ]))
-  ) {
-    return await sendErrorMessage(
-      interaction,
-      "❌ Bot lacks required permissions."
-    );
-  }
-
+    // Moved permission and channel checks inside the command execution
   try {
     await command.execute(interaction);
   } catch (error) {
     console.error(error);
-    await interaction.reply({
-      content: "❌ Error executing command!",
-      ephemeral: true,
-    });
+    if (interaction.replied || interaction.deferred) {
+      await interaction.followUp({
+        content: "❌ There was an error while executing this command!",
+        ephemeral: true,
+      });
+    } else {
+      await interaction.reply({
+        content: "❌ There was an error while executing this command!",
+        ephemeral: true,
+      });
+    }
   }
 });
 
+// Prefix command handler (optional, but good for compatibility)
 client.on(Events.MessageCreate, async (message) => {
   if (message.author.bot || !message.content.startsWith(config.prefix)) return;
 
@@ -150,43 +131,30 @@ client.on(Events.MessageCreate, async (message) => {
   const commandName = args.shift().toLowerCase();
   const command = client.commands.get(commandName);
 
-  if (!command) {
-    console.warn(`⚠️ Prefix command not found: ${commandName}`);
+  // Nếu command hợp lệ, thực thi bình thường
+  if (command) {
+    try {
+      if (command.executePrefix) {
+        await command.executePrefix(message, args);
+      } else {
+        console.warn(`⚠️ Command ${commandName} missing 'executePrefix'.`);
+      }
+    } catch (error) {
+      console.error("❌ Error executing prefix command:", error);
+      await message.reply("❌ An error occurred while executing the command.");
+    }
     return;
   }
 
-  if (
-    message.channel.id !== config.allowedChannelId &&
-    message.channel.parentId !== config.allowedChannelId &&
-    commandName !== "gpthelp"
-  ) {
-    return await message.reply(
-      `⚠️ Use \`${config.prefix}${commandName}\` in <#${config.allowedChannelId}> or its threads!`
-    );
-  }
-
-  if (
-    !(await hasBotPermissions(message.channel, [
-      "SendMessages",
-      "ReadMessageHistory",
-      "ViewChannel",
-    ]))
-  ) {
-    return await message.reply("❌ Bot lacks required permissions.");
-  }
-
-  try {
-    if (command.executePrefix) {
-      await command.executePrefix(message, args);
-    } else {
-      console.warn(`⚠️ Command ${commandName} missing 'executePrefix'.`);
-    }
-  } catch (error) {
-    console.error("❌ Error executing prefix command:", error);
-    await message.reply("❌ An error occurred while executing the command.");
+  // Nếu command không hợp lệ, chỉ phản hồi trong kênh được phép
+  if (message.channel.id === config.allowedChannelId) {
+    await message.reply(`❌ Lệnh \`${config.prefix}${commandName}\` không hợp lệ. Vui lòng sử dụng \`${config.prefix}gpthelp\` để xem danh sách lệnh.`);
+    console.warn(`⚠️ Prefix command not found: ${commandName}`);
   }
 });
 
+
+// Auto-reply with a help suggestion (optional, and likely redundant with /gpthelp)
 client.on(Events.MessageCreate, async (message) => {
   if (
     !message.author.bot &&
@@ -199,23 +167,23 @@ client.on(Events.MessageCreate, async (message) => {
       message.channel.type === ChannelType.PrivateThread
     ) {
       const now = Date.now();
-      const cooldownAmount = (config.helpCooldown || 60) * 1000;
+      const cooldownAmount = (config.helpCooldown || 60) * 1000; // Default to 60 seconds
 
       if (helpCooldowns.has(message.author.id)) {
         const lastMessageTime = helpCooldowns.get(message.author.id);
         if (now < lastMessageTime + cooldownAmount) {
-          return;
+          return; // Too soon, don't send another help message
         }
       }
 
       try {
-        const { getRandomHelpSuggestion } = require("./utils/help");
+        const { getRandomHelpSuggestion } = require("./utils/help"); // Make sure this path is correct
         const helpMessage = getRandomHelpSuggestion();
         await message.reply({
           content: helpMessage,
-          allowedMentions: { repliedUser: false },
+          allowedMentions: { repliedUser: false }, // Don't ping the user
         });
-        helpCooldowns.set(message.author.id, now);
+        helpCooldowns.set(message.author.id, now); // Update the last message time
       } catch (error) {
         console.error("❌ Error sending help suggestion:", error);
       }
