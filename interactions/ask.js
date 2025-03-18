@@ -69,20 +69,21 @@ async function processImageAttachment(message) {
         `❌ Loại tệp không được hỗ trợ. Chỉ hỗ trợ: ${allowedTypes.join(", ")}`,
         discordUtils.isSlashCommand(message)
       );
-      return undefined;
+      return null;
     }
-    const tempDir = path.join(__dirname, "..", "temp");
-    if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
-    const imagePath = path.join(tempDir, "temp_image.png");
+
     try {
-      await downloadImage(attachment.url, imagePath);
-      const imageData = fileToGenerativePart(imagePath, "image/png");
-      fs.unlinkSync(imagePath);
-      return imageData;
+      const base64Image = await imageUrlToBase64(attachment.url);
+      return {
+        inlineData: {
+          mimeType: attachment.contentType,
+          data: base64Image,
+        },
+      };
     } catch (error) {
+      console.error("Error processing image:", error);
       await discordUtils.sendErrorMessage(message, "❌ Có lỗi khi xử lý ảnh.");
-      if (fs.existsSync(imagePath)) fs.unlinkSync(imagePath);
-      return undefined;
+      return null;
     }
   }
   return null;
@@ -272,56 +273,16 @@ async function handleAskCommand(message, prompt, language) {
 
     const languageInstruction = config.languageInstruction;
     const markdownInstruction = `
-  Định dạng câu trả lời của bạn bằng Markdown, tuân thủ NGHIÊM NGẶT các quy tắc sau đây. Đây là YÊU CẦU BẮT BUỘC, không được phép sai lệch:
-  
-  1. **Code Python:**
-     - LUÔN LUÔN đặt code Python trong code block. Sử dụng cú pháp mở đầu là \`\`\`python và cú pháp kết thúc là \`\`\`.
-     - Ví dụ:
-       \`\`\`python
-       def calculate_sum(a, b):
-           return a + b
-  
-       print(calculate_sum(5, 3))
-       \`\`\`
-  
-  2. **Tiêu đề và phần:**
-     - Sử dụng dấu sao đôi (**) để IN ĐẬM tiêu đề chính.
-     - KHÔNG sử dụng dấu thăng (#) cho tiêu đề.
-     - Ví dụ:
-       **1. Giới thiệu về bài toán**
-       **2. Giải thuật**
-       **3. Code mẫu**
-  
-  3. **Giải thích chi tiết:**
-     - Sử dụng gạch đầu dòng (-) cho mỗi ý giải thích.
-     - In đậm tên hàm, tên biến, và các thuật ngữ kỹ thuật quan trọng.
-     - Xuống dòng đầy đủ sau mỗi gạch đầu dòng để tạo khoảng cách rõ ràng.
-  
-  4. **Công thức toán học:**
-     - Hiển thị các biểu thức, công thức toán một cách rõ ràng, dễ đọc.
-     - Nếu có thể, sử dụng các ký tự Unicode để biểu diễn công thức. Ví dụ: x², √(x), π, Σ (tổng), ∫ (tích phân).
-     - KHÔNG sử dụng LaTeX trực tiếp (ví dụ: \\sqrt{x}). Thay vào đó, hãy dùng các ký tự Unicode, hoặc biểu diễn gần đúng.
-  
-  5. **Ví dụ (nếu có):**
-     - Trình bày ví dụ một cách rõ ràng, có thể sử dụng gạch đầu dòng hoặc bảng (nếu cần).
-  
-  6. **TUYỆT ĐỐI KHÔNG:**
-     - KHÔNG hiển thị dấu hoa thị (*) trực tiếp trong văn bản, trừ khi nó là một phần của code hoặc có ý nghĩa đặc biệt.
-     - KHÔNG hiển thị code Python trực tiếp trong văn bản. LUÔN LUÔN sử dụng code block.
-     - KHÔNG sử dụng LaTeX thô.
-     - Không xuống hàng quá nhiều, gây loãng nội dung
-  
-  7. **Văn phong:**
-     - Sử dụng ngôn ngữ khoa học, chính xác, dễ hiểu.
-     - Tránh viết tắt, trừ khi là các thuật ngữ rất phổ biến.
-     - Luôn kiểm tra chính tả và ngữ pháp.
-  
-  **MỤC TIÊU:** Câu trả lời phải chuyên nghiệp, dễ đọc, dễ hiểu, và có tính thẩm mỹ cao. Hãy tưởng tượng bạn đang trình bày cho một người có chuyên môn.
-  `;
+      Định dạng câu trả lời của bạn bằng Markdown:
 
-    const finalPrompt = imagePart
-      ? `${languageInstruction}\n${markdownInstruction}\n\n${prompt}\n\n[Hình ảnh đính kèm]\n\n${chosenPrompt}`
-      : `${languageInstruction}\n${markdownInstruction}\n\n${prompt}\n\n${chosenPrompt}`;
+      - Sử dụng **in đậm** cho tiêu đề và các ý chính.
+      - Sử dụng gạch đầu dòng (-) cho danh sách.
+      - Nếu có code (Python, JavaScript, v.v.), đặt trong code block (\`\`\`<ngôn ngữ>\n...\n\`\`\`).
+      - Hiển thị công thức toán học bằng ký tự Unicode (ví dụ: f'(x), e^x, x > 0, (0, +∞)). Tránh LaTeX thô.
+      - Sử dụng ngôn ngữ chính xác và dễ hiểu.
+    `;
+
+    const finalPrompt = `${languageInstruction}\n${markdownInstruction}\n\n${prompt}\n\n${chosenPrompt}`;
 
     const estimatedPromptTokens = Math.round(finalPrompt.length / 4);
     const dailyTokenUsage = await db.getDailyTokenUsage(userId);
@@ -360,7 +321,7 @@ async function handleAskCommand(message, prompt, language) {
           },
           {
             role: "user",
-            content: `${prompt}\n\n${chosenPrompt}`,
+            content: prompt + "\n\n" + chosenPrompt,
           },
         ];
         if (imagePart) {
@@ -401,14 +362,6 @@ async function handleAskCommand(message, prompt, language) {
       false,
       responseText,
       0
-    );
-    await sendMessageAndSave(
-      thread,
-      prompt,
-      userId,
-      true,
-      null,
-      config.pointsPerInteraction
     );
 
     await db.executeQuery(

@@ -197,26 +197,16 @@ async function handleNewCommand(
 
     const languageInstruction = config.languageInstruction;
     const markdownInstruction = `
-Định dạng câu trả lời của bạn bằng Markdown, tuân thủ NGHIÊM NGẶT các quy tắc sau đây. Đây là YÊU CẦU BẮT BUỘC, không được phép sai lệch:
-1. **Code Python:**
-   - Luôn đặt code Python trong code block (bắt đầu với \`\`\`python và kết thúc với \`\`\`).
-2. **Tiêu đề và phần:**
-   - Sử dụng dấu sao đôi (**) để IN ĐẬM tiêu đề chính.
-3. **Giải thích chi tiết:**
-   - Sử dụng gạch đầu dòng (-) cho mỗi ý giải thích.
-4. **Công thức toán học:**
-   - Hiển thị công thức bằng ký tự Unicode.
-5. **Ví dụ (nếu có):**
-   - Trình bày ví dụ rõ ràng.
-6. **Không:**
-   - Không sử dụng LaTeX thô.
-7. **Văn phong:**
-   - Sử dụng ngôn ngữ chính xác và dễ hiểu.
-`;
+      Định dạng câu trả lời của bạn bằng Markdown:
 
-    const finalPrompt = imageUrl
-      ? `${languageInstruction}\n${markdownInstruction}\n\n${prompt}\n\n[Hình ảnh đính kèm]\n\n${chosenPrompt}`
-      : `${languageInstruction}\n${markdownInstruction}\n\n${prompt}\n\n${chosenPrompt}`;
+      - Sử dụng **in đậm** cho tiêu đề và các ý chính.
+      - Sử dụng gạch đầu dòng (-) cho danh sách.
+      - Nếu có code (Python, JavaScript, v.v.), đặt trong code block (\`\`\`<ngôn ngữ>\n...\n\`\`\`).
+      - Hiển thị công thức toán học bằng ký tự Unicode (ví dụ: f'(x), e^x, x > 0, (0, +∞)). Tránh LaTeX thô.
+      - Sử dụng ngôn ngữ chính xác và dễ hiểu.
+    `;
+
+    const finalPrompt = `${languageInstruction}\n${markdownInstruction}\n\n${prompt}\n\n${chosenPrompt}`;
 
     await db.saveThreadInfo(
       thread.id,
@@ -303,14 +293,6 @@ async function handleNewCommand(
       false,
       responseText,
       0
-    );
-    await sendMessageAndSave(
-      thread,
-      prompt,
-      userId,
-      true,
-      null,
-      config.newThreadPoints
     );
 
     await db.executeQuery(
